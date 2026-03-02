@@ -6,8 +6,8 @@ Connections are authenticated with a nonce challenge:
 3) on success, the socket is registered with its authenticated device_id
 
 Messages are JSON objects with an optional `target_device_id` field:
-  - Present  → unicast to that specific device
-  - Absent   → broadcast to all OTHER connected devices
+  - Present  -> unicast to that specific device
+  - Absent   -> broadcast to all OTHER connected devices
 
 Message envelope:
 {
@@ -44,6 +44,14 @@ _pairing_lock = asyncio.Lock()
 PAIRING_WAIT_SECONDS = 120.0
 
 
+def _message_id(msg: dict[str, object]) -> str | None:
+    payload = msg.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    msg_id = payload.get("id")
+    return msg_id if isinstance(msg_id, str) and msg_id else None
+
+
 def configure_auth(auth_manager: GatewayAuthManager) -> None:
     """Inject the auth manager configured at gateway startup."""
     global _auth_manager
@@ -53,7 +61,7 @@ def configure_auth(auth_manager: GatewayAuthManager) -> None:
 async def register(device_id: str, ws: ServerConnection) -> None:
     async with _registry_lock:
         if device_id in _registry:
-            logger.warning("Device %s reconnected — replacing old connection.", device_id)
+            logger.warning("Device %s reconnected; replacing old connection.", device_id)
             old_ws = _registry[device_id]
             try:
                 await old_ws.close(code=4000, reason="replaced by new connection")
@@ -73,11 +81,12 @@ async def relay_message(sender_id: str, raw: str) -> None:
     try:
         msg = json.loads(raw)
     except json.JSONDecodeError:
-        logger.warning("Non-JSON message from %s — ignored.", sender_id)
+        logger.warning("Non-JSON message from %s ignored.", sender_id)
         return
 
     msg["sender_device_id"] = sender_id
     target_id: str | None = msg.get("target_device_id")
+    msg_id = _message_id(msg)
     out = json.dumps(msg)
 
     async with _registry_lock:
@@ -85,21 +94,26 @@ async def relay_message(sender_id: str, raw: str) -> None:
             target_ws = _registry.get(target_id)
             if target_ws is None:
                 logger.warning(
-                    "Target device %s not connected. Message from %s dropped.",
+                    "Target device %s not connected. Message from %s dropped [msg_id=%s].",
                     target_id,
                     sender_id,
+                    msg_id or "-",
                 )
                 return
             recipients = [(target_id, target_ws)]
         else:
-            recipients = [
-                (did, ws) for did, ws in _registry.items() if did != sender_id
-            ]
+            recipients = [(did, ws) for did, ws in _registry.items() if did != sender_id]
 
     for did, ws in recipients:
         try:
             await ws.send(out)
-            logger.debug("Relayed message from %s → %s", sender_id, did)
+            logger.info(
+                "Relayed message [msg_id=%s sender=%s recipient=%s target=%s]",
+                msg_id or "-",
+                sender_id,
+                did,
+                target_id or "*",
+            )
         except Exception as exc:
             logger.warning("Failed to send to %s: %s", did, exc)
 

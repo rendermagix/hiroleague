@@ -123,6 +123,12 @@ class DevicesChannel(ChannelPlugin):
         }
         if message.recipient_id:
             out["target_device_id"] = message.recipient_id
+        logger.info(
+            "Forwarding outbound message to gateway [msg_id=%s recipient=%s content_type=%s]",
+            message.id,
+            message.recipient_id or "*",
+            message.content_type,
+        )
         await self._gateway_ws.send(json.dumps(out))
 
     async def _run_gateway_loop(self) -> None:
@@ -246,6 +252,12 @@ class DevicesChannel(ChannelPlugin):
 
         unified.channel = "devices"
         unified.direction = "inbound"
+        logger.info(
+            "Received inbound message from gateway [msg_id=%s sender=%s content_type=%s]",
+            unified.id,
+            unified.sender_id,
+            unified.content_type,
+        )
         await self.emit(unified)
 
     async def _handle_pairing_request(self, msg: dict) -> None:

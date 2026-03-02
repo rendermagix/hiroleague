@@ -98,6 +98,13 @@ class AgentManager:
     async def _process(self, msg: UnifiedMessage) -> None:
         thread_id = _build_thread_id(msg)
         config = {"configurable": {"thread_id": thread_id}}
+        logger.info(
+            "Agent processing message [msg_id=%s thread=%s sender=%s body_length=%d]",
+            msg.id,
+            thread_id,
+            msg.sender_id,
+            len(msg.body),
+        )
         try:
             result = await self._agent.ainvoke(
                 {"messages": [{"role": "user", "content": msg.body}]},
@@ -115,8 +122,10 @@ class AgentManager:
 
         reply = _make_reply(msg, reply_body)
         await self._comm.enqueue_outbound(reply)
-        logger.debug(
-            "Agent reply enqueued [thread=%s content_length=%d]",
+        logger.info(
+            "Agent reply enqueued [in_reply_to=%s reply_msg_id=%s thread=%s content_length=%d]",
+            msg.id,
+            reply.id,
             thread_id,
             len(reply_body),
         )
@@ -128,9 +137,11 @@ class AgentManager:
             msg: UnifiedMessage = await self._comm.inbound_queue.get()
             try:
                 if msg.content_type != "text":
-                    logger.debug(
-                        "AgentManager ignoring non-text message [content_type=%s]",
+                    logger.info(
+                        "AgentManager ignoring non-text message [msg_id=%s content_type=%s sender=%s]",
+                        msg.id,
                         msg.content_type,
+                        msg.sender_id,
                     )
                     continue
                 await self._process(msg)

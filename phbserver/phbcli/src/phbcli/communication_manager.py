@@ -90,6 +90,13 @@ class CommunicationManager:
             msg.content_type,
         )
         self.inbound_queue.put_nowait(msg)
+        logger.info(
+            "Inbound message queued [msg_id=%s channel=%s sender=%s content_type=%s]",
+            msg.id,
+            msg.channel,
+            msg.sender_id,
+            msg.content_type,
+        )
 
     # ------------------------------------------------------------------
     # Outbound path  (phbcli core → channel plugin)
@@ -98,6 +105,13 @@ class CommunicationManager:
     async def enqueue_outbound(self, msg: UnifiedMessage) -> None:
         """Place a message on the outbound queue to be sent to its channel."""
         await self.outbound_queue.put(msg)
+        logger.info(
+            "Outbound message queued [msg_id=%s channel=%s recipient=%s content_type=%s]",
+            msg.id,
+            msg.channel,
+            msg.recipient_id,
+            msg.content_type,
+        )
 
     async def _outbound_worker(self) -> None:
         """Continuously drain the outbound queue and dispatch to channel plugins."""
@@ -125,6 +139,13 @@ class CommunicationManager:
                 if self._plugin_manager is None:
                     logger.warning("Outbound message dropped: no PluginManager set.")
                     continue
+                logger.info(
+                    "Dispatching outbound message [msg_id=%s channel=%s recipient=%s content_type=%s]",
+                    msg.id,
+                    msg.channel,
+                    msg.recipient_id,
+                    msg.content_type,
+                )
                 await self._plugin_manager.send_to_channel(
                     msg.channel, msg.model_dump(mode="json")
                 )
