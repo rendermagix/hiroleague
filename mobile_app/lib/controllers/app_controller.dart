@@ -36,6 +36,9 @@ class AppController extends ChangeNotifier {
   bool _busy = false;
   bool get busy => _busy;
 
+  bool _initialized = false;
+  bool get initialized => _initialized;
+
   StreamSubscription<ChatMessage>? _messageSub;
   StreamSubscription<GatewayConnectionState>? _stateSub;
 
@@ -45,6 +48,7 @@ class AppController extends ChangeNotifier {
     if (_identity?.attestation != null) {
       await reconnect();
     }
+    _initialized = true;
     notifyListeners();
   }
 

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "phb-logger"
+version = "0.1.0"
+description = "Private Home Box — colourised structured logger"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "structlog>=25",
+    "colorama>=0.4.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/phb_logger"]

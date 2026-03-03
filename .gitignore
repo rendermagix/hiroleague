@@ -23,7 +23,7 @@ dist/
 .eggs/
 
 # IDE / OS
-.vscode/
+# .vscode/
 .idea/
 .DS_Store
 Thumbs.db

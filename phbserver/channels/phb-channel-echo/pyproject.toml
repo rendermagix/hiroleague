@@ -13,6 +13,7 @@ keywords = ["home", "server", "channel", "plugin", "echo"]
 dependencies = [
     "phb-channel-sdk",
     "typer>=0.12",
+    "phb-logger",
 ]
 
 [project.scripts]
@@ -23,3 +24,4 @@ packages = ["src/phb_channel_echo"]
 
 [tool.uv.sources]
 phb-channel-sdk = { workspace = true }
+phb-logger = { workspace = true }

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import subprocess
 import sys
 from collections.abc import Awaitable, Callable
@@ -23,12 +22,13 @@ from typing import Any
 import websockets
 from websockets.asyncio.server import ServerConnection
 from websockets.exceptions import ConnectionClosed
+from phb_logger import Logger
 
 from .channel_config import ChannelConfig, list_enabled_channels
 from .config import Config, resolve_log_dir
 from . import rpc_helpers as rpc
 
-logger = logging.getLogger(__name__)
+log = Logger.get("PLUGINS")
 
 
 @dataclass
@@ -37,7 +37,6 @@ class _ConnectedChannel:
     version: str
     description: str
     ws: ServerConnection
-    # Pending RPC requests keyed by request id
     pending: dict[str, asyncio.Future[Any]] = field(default_factory=dict)
 
 
@@ -69,14 +68,12 @@ class PluginManager:
         async with websockets.serve(
             self._handle_connection, self._host, self._port
         ):
-            logger.info(
-                "Plugin server listening on ws://%s:%d", self._host, self._port
-            )
+            log.info("Plugin server listening", url=f"ws://{self._host}:{self._port}")
             await self._spawn_channels()
             await self._stop_event.wait()
             await self._shutdown_channels()
 
-        logger.info("Plugin server stopped.")
+        log.info("Plugin server stopped")
 
     # ------------------------------------------------------------------
     # Subprocess management
@@ -85,7 +82,7 @@ class PluginManager:
     async def _spawn_channels(self) -> None:
         channels = list_enabled_channels()
         if not channels:
-            logger.info("No enabled channel plugins configured.")
+            log.info("No enabled channel plugins configured")
             return
 
         phb_ws = f"ws://{self._host}:{self._port}"
@@ -98,7 +95,7 @@ class PluginManager:
             "--phb-ws", phb_ws,
             "--log-dir", str(log_dir),
         ]
-        logger.info("Spawning channel plugin: %s → %s", ch.name, cmd)
+        log.info("Spawning channel plugin", channel=ch.name, cmd=cmd)
         try:
             if sys.platform == "win32":
                 proc = subprocess.Popen(
@@ -121,24 +118,21 @@ class PluginManager:
                 )
             self._subprocesses.append(proc)
         except FileNotFoundError:
-            logger.error(
-                "Channel command not found: %s. "
-                "Install it with: phbcli channel install %s",
-                cmd[0],
-                ch.name,
+            log.error(
+                "Channel command not found",
+                cmd=cmd[0],
+                hint=f"phbcli channel install {ch.name}",
             )
         except Exception as exc:
-            logger.error("Failed to spawn channel '%s': %s", ch.name, exc)
+            log.error("Failed to spawn channel plugin", channel=ch.name, error=str(exc))
 
     async def _shutdown_channels(self) -> None:
-        # Ask each connected plugin to stop gracefully
         for ch in list(self._channels.values()):
             try:
                 await ch.ws.send(rpc.build_notification("channel.stop", {}))
             except Exception:
                 pass
 
-        # Give plugins a moment to shut down, then terminate
         await asyncio.sleep(1)
         for proc in self._subprocesses:
             if proc.poll() is None:
@@ -158,11 +152,10 @@ class PluginManager:
                 try:
                     data = json.loads(raw)
                 except json.JSONDecodeError:
-                    logger.warning("Invalid JSON from plugin: %.200s", raw)
+                    log.warning("Invalid JSON from plugin", raw=str(raw)[:200])
                     continue
 
                 if "method" not in data:
-                    # This is a response to one of our requests
                     await self._handle_response(channel_name, data)
                     continue
 
@@ -179,12 +172,11 @@ class PluginManager:
                             description=params.get("description", ""),
                             ws=ws,
                         )
-                        logger.info(
-                            "Channel registered: %s v%s",
-                            channel_name,
-                            params.get("version", "?"),
+                        log.info(
+                            "Channel registered",
+                            channel=channel_name,
+                            version=params.get("version", "?"),
                         )
-                        # Push stored config immediately after registration
                         await self._push_config(channel_name)
 
                     case "channel.receive":
@@ -192,36 +184,38 @@ class PluginManager:
                             try:
                                 await self._on_message(params)
                             except Exception as exc:
-                                logger.exception(
-                                    "on_message handler error for '%s': %s",
-                                    channel_name,
-                                    exc,
+                                log.error(
+                                    "on_message handler error",
+                                    channel=channel_name,
+                                    error=str(exc),
+                                    exc_info=True,
                                 )
 
                     case "channel.event":
                         event_name = params.get("event")
                         event_data = params.get("data", {})
-                        logger.info(
-                            "[%s] event=%s data=%s",
-                            channel_name or "?",
-                            event_name,
-                            event_data,
+                        log.info(
+                            "Channel event received",
+                            channel=channel_name or "?",
+                            event_name=event_name,
+                            data=event_data,
                         )
                         if self._on_event and isinstance(event_name, str):
                             try:
                                 await self._on_event(event_name, event_data)
                             except Exception as exc:
-                                logger.exception(
-                                    "on_event handler error for '%s': %s",
-                                    channel_name or "?",
-                                    exc,
+                                log.error(
+                                    "on_event handler error",
+                                    channel=channel_name or "?",
+                                    error=str(exc),
+                                    exc_info=True,
                                 )
 
                     case _:
-                        logger.warning(
-                            "Unknown method from channel '%s': %s",
-                            channel_name or "?",
-                            method,
+                        log.warning(
+                            "Unknown method from channel plugin",
+                            channel=channel_name or "?",
+                            method=method,
                         )
                         if req_id is not None:
                             await ws.send(
@@ -235,13 +229,15 @@ class PluginManager:
         except ConnectionClosed:
             pass
         except Exception as exc:
-            logger.error(
-                "Error in plugin connection (%s): %s", channel_name or "?", exc
+            log.error(
+                "Error in plugin connection",
+                channel=channel_name or "?",
+                error=str(exc),
             )
         finally:
             if channel_name and channel_name in self._channels:
                 del self._channels[channel_name]
-                logger.info("Channel disconnected: %s", channel_name)
+                log.info("Channel disconnected", channel=channel_name)
 
     async def _handle_response(
         self, channel_name: str | None, data: dict[str, Any]
@@ -265,8 +261,6 @@ class PluginManager:
         cfg = load_channel_config(channel_name)
         payload = dict(cfg.config) if cfg else {}
         if channel_name == "devices":
-            # Devices channel is mandatory and receives runtime gateway settings
-            # from the core config to avoid stale values in channel JSON.
             payload.setdefault("gateway_url", self._config.gateway_url)
             payload.setdefault("device_id", self._config.device_id)
             payload.setdefault("ping_interval", 30)
@@ -283,9 +277,7 @@ class PluginManager:
         """Send a channel.send notification to a specific plugin."""
         ch = self._channels.get(channel_name)
         if ch is None:
-            logger.warning(
-                "Cannot send to channel '%s': not connected.", channel_name
-            )
+            log.warning("Cannot send to channel — not connected", channel=channel_name)
             return
         await ch.ws.send(rpc.build_notification("channel.send", message))
 
@@ -295,9 +287,7 @@ class PluginManager:
             try:
                 await ch.ws.send(rpc.build_notification("channel.send", message))
             except Exception as exc:
-                logger.warning(
-                    "Failed to send to channel '%s': %s", ch.name, exc
-                )
+                log.warning("Failed to broadcast to channel", channel=ch.name, error=str(exc))
 
     async def configure_channel(
         self, channel_name: str, config: dict[str, Any]
@@ -316,8 +306,8 @@ class PluginManager:
         """Send an event notification to a specific plugin."""
         ch = self._channels.get(channel_name)
         if ch is None:
-            logger.warning(
-                "Cannot send event to channel '%s': not connected.", channel_name
+            log.warning(
+                "Cannot send event to channel — not connected", channel=channel_name
             )
             return
         await ch.ws.send(

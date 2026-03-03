@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["phbcli", "gateway", "phb-channel-sdk", "channels/*"]
+members = ["phbcli", "gateway", "phb-channel-sdk", "phb-logger", "channels/*"]

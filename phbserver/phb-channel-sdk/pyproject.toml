@@ -13,7 +13,11 @@ keywords = ["home", "server", "websocket", "plugin", "channel"]
 dependencies = [
     "pydantic>=2",
     "websockets>=12",
+    "phb-logger",
 ]
+
+[tool.uv.sources]
+phb-logger = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phb_channel_sdk"]

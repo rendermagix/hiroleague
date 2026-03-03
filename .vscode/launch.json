@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug phbgateway",
+        "type": "python",
+        "request": "launch",
+        "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
+        "module": "phbgateway.main",
+        "cwd": "${workspaceFolder}\\phbserver",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\phbserver\\gateway\\src;${workspaceFolder}\\phbserver\\phb-channel-sdk\\src"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": false
+      },
+      {
+        "name": "Debug phbcli start -f",
+        "type": "python",
+        "request": "launch",
+        "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
+        "module": "phbcli.cli",
+        "args": ["start", "--foreground"],
+        "cwd": "${workspaceFolder}\\phbserver",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\phbserver\\phbcli\\src;${workspaceFolder}\\phbserver\\phb-channel-sdk\\src"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": false
+      },
+      {
+        "name": "Terminal Flutter mobile_app",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\mobile_app && flutter run\""
+      }
+    ],
+    "compounds": [
+      {
+        "name": "Debug Gateway + phbcli + Flutter Terminal",
+        "configurations": [
+          "Debug phbgateway",
+          "Debug phbcli start -f",
+          "Terminal Flutter mobile_app"
+        ]
+      }
+    ]
+  }
+  

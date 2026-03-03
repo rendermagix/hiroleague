@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import logging
 from pathlib import Path
 
 import websockets
@@ -21,10 +20,11 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 from websockets.exceptions import ConnectionClosed
+from phb_logger import Logger
 
 from phb_channel_sdk import ChannelInfo, ChannelPlugin, UnifiedMessage
 
-logger = logging.getLogger(__name__)
+log = Logger.get("DEVICES")
 
 BACKOFF_BASE = 1.0
 BACKOFF_MAX = 60.0
@@ -80,11 +80,11 @@ class DevicesChannel(ChannelPlugin):
         self._master_key_path = Path(
             str(config.get("master_key_path", str(self._master_key_path)))
         )
-        logger.info(
-            "Configured devices channel. gateway=%s device_id=%s master_key=%s",
-            self._gateway_url,
-            self._device_id,
-            self._master_key_path,
+        log.info(
+            "Devices channel configured",
+            gateway=self._gateway_url,
+            device_id=self._device_id,
+            master_key=str(self._master_key_path),
         )
 
     async def on_start(self) -> None:
@@ -116,18 +116,18 @@ class DevicesChannel(ChannelPlugin):
     async def send(self, message: UnifiedMessage) -> None:
         """UnifiedMessage -> gateway envelope."""
         if self._gateway_ws is None:
-            logger.warning("Gateway is not connected; dropping outbound message.")
+            log.warning("Gateway not connected — dropping outbound message")
             return
         out = {
             "payload": message.model_dump(mode="json"),
         }
         if message.recipient_id:
             out["target_device_id"] = message.recipient_id
-        logger.info(
-            "Forwarding outbound message to gateway [msg_id=%s recipient=%s content_type=%s]",
-            message.id,
-            message.recipient_id or "*",
-            message.content_type,
+        log.info(
+            "Forwarding message to gateway",
+            msg_id=message.id,
+            recipient=message.recipient_id or "*",
+            content_type=message.content_type,
         )
         await self._gateway_ws.send(json.dumps(out))
 
@@ -138,14 +138,11 @@ class DevicesChannel(ChannelPlugin):
         while True:
             try:
                 await self._run_gateway_connection(url)
-                logger.warning(
-                    "Gateway disconnected. Reconnecting in %.0fs...",
-                    backoff,
-                )
+                log.warning("Gateway disconnected, reconnecting", delay=f"{backoff:.0f}s")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning("Gateway error: %s. Reconnecting in %.0fs...", exc, backoff)
+                log.warning("Gateway error, reconnecting", error=str(exc), delay=f"{backoff:.0f}s")
 
             await self.emit_event(
                 "gateway_disconnected",
@@ -155,7 +152,7 @@ class DevicesChannel(ChannelPlugin):
             backoff = min(backoff * 2, BACKOFF_MAX)
 
     async def _run_gateway_connection(self, url: str) -> None:
-        logger.info("Connecting devices channel to gateway: %s", url)
+        log.info("Connecting to gateway", url=url)
         async with websockets.connect(url, ping_interval=self._ping_interval) as ws:
             await self._authenticate_with_gateway(ws)
             self._gateway_ws = ws
@@ -163,7 +160,7 @@ class DevicesChannel(ChannelPlugin):
                 "gateway_connected",
                 {"gateway_url": self._gateway_url, "device_id": self._device_id},
             )
-            logger.info("Connected to gateway.")
+            log.info("Connected to gateway", device_id=self._device_id)
 
             try:
                 async for raw in ws:
@@ -218,11 +215,13 @@ class DevicesChannel(ChannelPlugin):
         if auth_ack.get("type") != "auth_ok":
             raise RuntimeError(f"gateway rejected auth: {auth_ack}")
 
+        log.info("Gateway auth successful", device_id=self._device_id)
+
     async def _handle_gateway_message(self, raw: str) -> None:
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
-            logger.warning("Invalid JSON from gateway: %.200s", raw)
+            log.warning("Invalid JSON from gateway", raw=raw[:200])
             return
 
         msg_type = msg.get("type")
@@ -232,13 +231,13 @@ class DevicesChannel(ChannelPlugin):
 
         payload = msg.get("payload")
         if not isinstance(payload, dict):
-            logger.warning("Gateway payload is not an object: %s", payload)
+            log.warning("Gateway payload is not an object", payload=payload)
             return
 
         try:
             unified = UnifiedMessage.model_validate(payload)
         except Exception as exc:
-            logger.warning("Invalid UnifiedMessage payload from gateway: %s", exc)
+            log.warning("Invalid UnifiedMessage from gateway", error=str(exc))
             return
 
         sender_device_id = msg.get("sender_device_id")
@@ -252,11 +251,11 @@ class DevicesChannel(ChannelPlugin):
 
         unified.channel = "devices"
         unified.direction = "inbound"
-        logger.info(
-            "Received inbound message from gateway [msg_id=%s sender=%s content_type=%s]",
-            unified.id,
-            unified.sender_id,
-            unified.content_type,
+        log.info(
+            "Inbound message from gateway",
+            msg_id=unified.id,
+            sender=unified.sender_id,
+            content_type=unified.content_type,
         )
         await self.emit(unified)
 
@@ -265,15 +264,16 @@ class DevicesChannel(ChannelPlugin):
         pairing_code = msg.get("pairing_code")
         device_public_key = msg.get("device_public_key")
         if not isinstance(request_id, str) or not request_id:
-            logger.warning("pairing_request missing request_id")
+            log.warning("Pairing request missing request_id")
             return
         if not isinstance(pairing_code, str) or not pairing_code:
-            logger.warning("pairing_request missing pairing_code")
+            log.warning("Pairing request missing pairing_code")
             return
         if not isinstance(device_public_key, str) or not device_public_key:
-            logger.warning("pairing_request missing device_public_key")
+            log.warning("Pairing request missing device_public_key")
             return
 
+        log.info("Pairing request received", request_id=request_id)
         await self.emit_event(
             "pairing_request",
             {
@@ -288,17 +288,19 @@ class DevicesChannel(ChannelPlugin):
             return
         ws = self._gateway_ws
         if ws is None:
-            logger.warning("Gateway is not connected; cannot send pairing_response.")
+            log.warning("Gateway not connected — cannot send pairing_response")
             return
 
         request_id = data.get("request_id")
         status = data.get("status")
         if not isinstance(request_id, str) or not request_id:
-            logger.warning("pairing_response missing request_id")
+            log.warning("Pairing response missing request_id")
             return
         if not isinstance(status, str) or status not in {"approved", "rejected"}:
-            logger.warning("pairing_response invalid status")
+            log.warning("Pairing response invalid status", status=status)
             return
+
+        log.info("Sending pairing response to gateway", request_id=request_id, status=status)
 
         outbound: dict[str, object] = {
             "type": "pairing_response",

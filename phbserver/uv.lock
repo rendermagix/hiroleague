@@ -7,6 +7,7 @@ members = [
     "phb-channel-devices",
     "phb-channel-echo",
     "phb-channel-sdk",
+    "phb-logger",
     "phbcli",
     "phbgateway",
 ]
@@ -791,6 +792,7 @@ source = { editable = "channels/phb-channel-devices" }
 dependencies = [
     { name = "cryptography" },
     { name = "phb-channel-sdk" },
+    { name = "phb-logger" },
     { name = "typer" },
     { name = "websockets" },
 ]
@@ -799,6 +801,7 @@ dependencies = [
 requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "phb-channel-sdk", editable = "phb-channel-sdk" },
+    { name = "phb-logger", editable = "phb-logger" },
     { name = "typer", specifier = ">=0.12" },
     { name = "websockets", specifier = ">=12" },
 ]
@@ -809,12 +812,14 @@ version = "0.1.0"
 source = { editable = "channels/phb-channel-echo" }
 dependencies = [
     { name = "phb-channel-sdk" },
+    { name = "phb-logger" },
     { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "phb-channel-sdk", editable = "phb-channel-sdk" },
+    { name = "phb-logger", editable = "phb-logger" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -823,6 +828,7 @@ name = "phb-channel-sdk"
 version = "0.1.0"
 source = { editable = "phb-channel-sdk" }
 dependencies = [
+    { name = "phb-logger" },
     { name = "pydantic" },
     { name = "websockets" },
 ]
@@ -835,6 +841,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "phb-logger", editable = "phb-logger" },
     { name = "pydantic", specifier = ">=2" },
     { name = "websockets", specifier = ">=12" },
 ]
@@ -843,6 +850,21 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
+]
+
+[[package]]
+name = "phb-logger"
+version = "0.1.0"
+source = { editable = "phb-logger" }
+dependencies = [
+    { name = "colorama" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "colorama", specifier = ">=0.4.6" },
+    { name = "structlog", specifier = ">=25" },
 ]
 
 [[package]]
@@ -856,6 +878,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "phb-channel-sdk" },
+    { name = "phb-logger" },
     { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
@@ -878,6 +901,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=0.3" },
     { name = "langgraph", specifier = ">=1.0" },
     { name = "phb-channel-sdk", editable = "phb-channel-sdk" },
+    { name = "phb-logger", editable = "phb-logger" },
     { name = "pydantic", specifier = ">=2" },
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
@@ -899,6 +923,7 @@ source = { editable = "gateway" }
 dependencies = [
     { name = "cryptography" },
     { name = "phb-channel-sdk" },
+    { name = "phb-logger" },
     { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
@@ -915,6 +940,7 @@ dev = [
 requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "phb-channel-sdk", editable = "phb-channel-sdk" },
+    { name = "phb-logger", editable = "phb-logger" },
     { name = "pydantic", specifier = ">=2" },
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
@@ -1332,6 +1358,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c4/68/79977123bb7be889ad680d79a40f339082c1978b5cfcf62c2d8d196873ac/starlette-0.52.1.tar.gz", hash = "sha256:834edd1b0a23167694292e94f597773bc3f89f362be6effee198165a35d62933", size = 2653702, upload-time = "2026-01-18T13:34:11.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/0d/13d1d239a25cbfb19e740db83143e95c772a1fe10202dda4b76792b114dd/starlette-0.52.1-py3-none-any.whl", hash = "sha256:0029d43eb3d273bc4f83a08720b4912ea4b071087a3b48db01b7c839f7954d74", size = 74272, upload-time = "2026-01-18T13:34:09.188Z" },
+]
+
+[[package]]
+name = "structlog"
+version = "25.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
 ]
 
 [[package]]

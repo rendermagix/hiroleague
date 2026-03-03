@@ -46,6 +46,13 @@ class _RootScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
+    if (!app.initialized) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     final paired = app.identity?.attestation != null;
     return paired ? const ChatScreen() : const PairingScreen();
   }

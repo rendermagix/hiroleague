@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import signal
 import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-logger = logging.getLogger("phbcli.server_process")
+from phb_logger import Logger
+
+log = Logger.get("SERVER")
 
 
 async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
@@ -75,7 +76,7 @@ async def _main(foreground: bool = False) -> None:
     plugin_manager: PluginManager | None = None
 
     def _shutdown(*_: object) -> None:
-        logger.info("Shutdown signal received.")
+        log.info("Shutdown signal received")
         stop_event.set()
 
     if sys.platform == "win32":
@@ -197,13 +198,11 @@ async def _main(foreground: bool = False) -> None:
     set_channel_info_provider(plugin_manager.get_channel_info)
     agent_manager = AgentManager(comm_manager)
 
-    logger.info(
-        "Starting phbcli server. HTTP: http://%s:%d/status  "
-        "plugin WS: ws://127.0.0.1:%d  device_id: %s",
-        config.http_host,
-        config.http_port,
-        config.plugin_port,
-        config.device_id,
+    log.info(
+        "Starting phbcli server",
+        http=f"http://{config.http_host}:{config.http_port}/status",
+        plugin_ws=f"ws://127.0.0.1:{config.plugin_port}",
+        device_id=config.device_id,
     )
 
     coros = [
@@ -230,7 +229,7 @@ async def _main(foreground: bool = False) -> None:
         pass
 
     mark_disconnected()
-    logger.info("phbcli server exited.")
+    log.info("phbcli server exited")
 
 
 if __name__ == "__main__":

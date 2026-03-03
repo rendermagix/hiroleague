@@ -17,19 +17,19 @@ so non-text messages are drained and dropped.
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from phb_channel_sdk.models import UnifiedMessage
+from phb_logger import Logger
 
 from .agent_config import load_agent_config, load_system_prompt
 
 if TYPE_CHECKING:
     from .communication_manager import CommunicationManager
 
-logger = logging.getLogger(__name__)
+log = Logger.get("AGENT")
 
 _FALLBACK_ERROR_BODY = (
     "Sorry, I encountered an error processing your message. Please try again."
@@ -75,10 +75,10 @@ class AgentManager:
         config = load_agent_config()
         system_prompt = load_system_prompt()
 
-        logger.info(
-            "Building agent with model=%s provider=%s",
-            config.model,
-            config.provider,
+        log.info(
+            "Building agent",
+            model=config.model,
+            provider=config.provider,
         )
 
         model = init_chat_model(
@@ -98,12 +98,12 @@ class AgentManager:
     async def _process(self, msg: UnifiedMessage) -> None:
         thread_id = _build_thread_id(msg)
         config = {"configurable": {"thread_id": thread_id}}
-        logger.info(
-            "Agent processing message [msg_id=%s thread=%s sender=%s body_length=%d]",
-            msg.id,
-            thread_id,
-            msg.sender_id,
-            len(msg.body),
+        log.info(
+            "Processing message",
+            msg_id=msg.id,
+            thread=thread_id,
+            sender=msg.sender_id,
+            body_length=len(msg.body),
         )
         try:
             result = await self._agent.ainvoke(
@@ -112,36 +112,36 @@ class AgentManager:
             )
             reply_body: str = result["messages"][-1].content
         except Exception as exc:
-            logger.error(
-                "Agent error [thread=%s]: %s",
-                thread_id,
-                exc,
+            log.error(
+                "Agent invocation error",
+                thread=thread_id,
+                error=str(exc),
                 exc_info=True,
             )
             reply_body = _FALLBACK_ERROR_BODY
 
         reply = _make_reply(msg, reply_body)
         await self._comm.enqueue_outbound(reply)
-        logger.info(
-            "Agent reply enqueued [in_reply_to=%s reply_msg_id=%s thread=%s content_length=%d]",
-            msg.id,
-            reply.id,
-            thread_id,
-            len(reply_body),
+        log.info(
+            "Agent reply enqueued",
+            in_reply_to=msg.id,
+            reply_msg_id=reply.id,
+            thread=thread_id,
+            content_length=len(reply_body),
         )
 
     async def run(self) -> None:
         """Drain inbound_queue and process text messages.  Runs forever."""
-        logger.info("AgentManager started.")
+        log.info("AgentManager started")
         while True:
             msg: UnifiedMessage = await self._comm.inbound_queue.get()
             try:
                 if msg.content_type != "text":
-                    logger.info(
-                        "AgentManager ignoring non-text message [msg_id=%s content_type=%s sender=%s]",
-                        msg.id,
-                        msg.content_type,
-                        msg.sender_id,
+                    log.info(
+                        "Ignoring non-text message",
+                        msg_id=msg.id,
+                        content_type=msg.content_type,
+                        sender=msg.sender_id,
                     )
                     continue
                 await self._process(msg)

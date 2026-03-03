@@ -24,6 +24,7 @@ dependencies = [
     "rich>=13",
     "cryptography>=43",
     "phb-channel-sdk",
+    "phb-logger",
 ]
 
 [project.scripts]
@@ -31,6 +32,7 @@ phbgateway = "phbgateway.main:cli"
 
 [tool.uv.sources]
 phb-channel-sdk = { workspace = true }
+phb-logger = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phbgateway"]

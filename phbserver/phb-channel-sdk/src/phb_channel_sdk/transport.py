@@ -19,18 +19,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from typing import Any
 from uuid import uuid4
 
 import websockets
 from websockets.exceptions import ConnectionClosed
+from phb_logger import Logger
 
 from . import rpc
 from .base import ChannelPlugin
 from .models import RpcRequest, RpcResponse, UnifiedMessage
 
-logger = logging.getLogger(__name__)
+log = Logger.get("TRANSPORT")
 
 RECONNECT_DELAY = 5.0  # seconds before retrying connection to phbcli
 
@@ -41,7 +41,7 @@ class PluginTransport:
     def __init__(self, plugin: ChannelPlugin, phb_ws_url: str) -> None:
         self._plugin = plugin
         self._url = phb_ws_url
-        self._ws: Any = None  # websockets connection
+        self._ws: Any = None
         self._pending: dict[str, asyncio.Future[Any]] = {}
         self._stop_event = asyncio.Event()
         self._started = False
@@ -58,17 +58,17 @@ class PluginTransport:
             except ConnectionClosed:
                 if self._stop_event.is_set():
                     break
-                logger.warning(
-                    "Disconnected from phbcli. Reconnecting in %.0fs…",
-                    RECONNECT_DELAY,
+                log.warning(
+                    "Disconnected from phbcli, reconnecting",
+                    delay=f"{RECONNECT_DELAY:.0f}s",
                 )
             except OSError as exc:
                 if self._stop_event.is_set():
                     break
-                logger.warning(
-                    "Could not reach phbcli (%s). Reconnecting in %.0fs…",
-                    exc,
-                    RECONNECT_DELAY,
+                log.warning(
+                    "Could not reach phbcli, reconnecting",
+                    error=str(exc),
+                    delay=f"{RECONNECT_DELAY:.0f}s",
                 )
 
             if not self._stop_event.is_set():
@@ -84,10 +84,10 @@ class PluginTransport:
         self._stop_event.set()
 
     async def _connect_and_run(self) -> None:
-        logger.info(
-            "Connecting to phbcli plugin server: %s (channel=%s)",
-            self._url,
-            self._plugin.info.name,
+        log.info(
+            "Connecting to phbcli plugin server",
+            url=self._url,
+            channel=self._plugin.info.name,
         )
         async with websockets.connect(self._url) as ws:
             self._ws = ws
@@ -102,9 +102,8 @@ class PluginTransport:
                     },
                 )
             )
-            logger.info("Registered channel '%s'", self._plugin.info.name)
+            log.info("Channel registered with phbcli", channel=self._plugin.info.name)
 
-            # Wire plugin.emit → channel.receive notification to phbcli
             async def _forward_inbound(msg: UnifiedMessage) -> None:
                 await self._notify("channel.receive", msg.model_dump(mode="json"))
 
@@ -132,7 +131,7 @@ class PluginTransport:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            logger.warning("Invalid JSON from phbcli: %.200s", raw)
+            log.warning("Invalid JSON from phbcli", raw=raw[:200])
             return
 
         if "method" in data:
@@ -193,7 +192,12 @@ class PluginTransport:
                     }
 
         except Exception as exc:
-            logger.exception("Error handling RPC method '%s'", req.method)
+            log.error(
+                "Error handling RPC method",
+                method=req.method,
+                error=str(exc),
+                exc_info=True,
+            )
             error = {"code": -32603, "message": str(exc)}
 
         if req.id is not None and self._ws is not None:

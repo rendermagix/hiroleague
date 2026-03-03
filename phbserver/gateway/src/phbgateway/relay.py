@@ -21,16 +21,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import secrets
 from typing import Dict
 
 import websockets
 from websockets.asyncio.server import ServerConnection
+from phb_logger import Logger
 
 from .auth import GatewayAuthManager, generate_nonce
 
-logger = logging.getLogger(__name__)
+log = Logger.get("RELAY")
 
 # device_id -> websocket
 _registry: Dict[str, ServerConnection] = {}
@@ -61,27 +61,27 @@ def configure_auth(auth_manager: GatewayAuthManager) -> None:
 async def register(device_id: str, ws: ServerConnection) -> None:
     async with _registry_lock:
         if device_id in _registry:
-            logger.warning("Device %s reconnected; replacing old connection.", device_id)
+            log.warning("Device reconnected, replacing old connection", device_id=device_id)
             old_ws = _registry[device_id]
             try:
                 await old_ws.close(code=4000, reason="replaced by new connection")
             except Exception:
                 pass
         _registry[device_id] = ws
-        logger.info("Device registered: %s (total=%d)", device_id, len(_registry))
+        log.info("Device registered", device_id=device_id, total=len(_registry))
 
 
 async def unregister(device_id: str) -> None:
     async with _registry_lock:
         _registry.pop(device_id, None)
-        logger.info("Device unregistered: %s (total=%d)", device_id, len(_registry))
+        log.info("Device unregistered", device_id=device_id, total=len(_registry))
 
 
 async def relay_message(sender_id: str, raw: str) -> None:
     try:
         msg = json.loads(raw)
     except json.JSONDecodeError:
-        logger.warning("Non-JSON message from %s ignored.", sender_id)
+        log.warning("Non-JSON message ignored", sender_id=sender_id)
         return
 
     msg["sender_device_id"] = sender_id
@@ -93,11 +93,11 @@ async def relay_message(sender_id: str, raw: str) -> None:
         if target_id:
             target_ws = _registry.get(target_id)
             if target_ws is None:
-                logger.warning(
-                    "Target device %s not connected. Message from %s dropped [msg_id=%s].",
-                    target_id,
-                    sender_id,
-                    msg_id or "-",
+                log.warning(
+                    "Target device not connected, message dropped",
+                    target_id=target_id,
+                    sender_id=sender_id,
+                    msg_id=msg_id or "-",
                 )
                 return
             recipients = [(target_id, target_ws)]
@@ -107,15 +107,15 @@ async def relay_message(sender_id: str, raw: str) -> None:
     for did, ws in recipients:
         try:
             await ws.send(out)
-            logger.info(
-                "Relayed message [msg_id=%s sender=%s recipient=%s target=%s]",
-                msg_id or "-",
-                sender_id,
-                did,
-                target_id or "*",
+            log.info(
+                "Message relayed",
+                msg_id=msg_id or "-",
+                sender=sender_id,
+                recipient=did,
+                target=target_id or "*",
             )
         except Exception as exc:
-            logger.warning("Failed to send to %s: %s", did, exc)
+            log.warning("Failed to send to device", device_id=did, error=str(exc))
 
 
 async def _authenticate_connection(
@@ -257,16 +257,16 @@ async def _handle_pairing_response_from_desktop(msg: dict[str, object]) -> None:
     request_id = msg.get("request_id")
     status = msg.get("status")
     if not isinstance(request_id, str) or not request_id:
-        logger.warning("Ignoring pairing_response without request_id.")
+        log.warning("Ignoring pairing_response without request_id")
         return
     if not isinstance(status, str) or status not in {"approved", "rejected"}:
-        logger.warning("Ignoring pairing_response with invalid status.")
+        log.warning("Ignoring pairing_response with invalid status")
         return
 
     async with _pairing_lock:
         pending_ws = _pairing_pending.pop(request_id, None)
     if pending_ws is None:
-        logger.warning("No pending pairing request found for request_id=%s", request_id)
+        log.warning("No pending pairing request found", request_id=request_id)
         return
 
     outbound: dict[str, object] = {
@@ -298,7 +298,7 @@ async def handle_connection(ws: ServerConnection) -> None:
     try:
         raw = await asyncio.wait_for(ws.recv(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        logger.warning("Connection rejected during auth: auth timeout")
+        log.warning("Auth rejected", reason="timeout")
         await ws.close(code=4003, reason="auth timeout")
         return
     except websockets.ConnectionClosed:
@@ -307,11 +307,11 @@ async def handle_connection(ws: ServerConnection) -> None:
     try:
         first_msg = json.loads(str(raw))
     except json.JSONDecodeError:
-        logger.warning("Connection rejected during auth: first message invalid JSON")
+        log.warning("Auth rejected", reason="first message invalid JSON")
         await ws.close(code=4003, reason="invalid json")
         return
     if not isinstance(first_msg, dict):
-        logger.warning("Connection rejected during auth: first message must be object")
+        log.warning("Auth rejected", reason="first message must be object")
         await ws.close(code=4003, reason="invalid first message")
         return
 
@@ -321,11 +321,13 @@ async def handle_connection(ws: ServerConnection) -> None:
 
     ok, device_id, reason, role = await _authenticate_connection(nonce, first_msg)
     if not ok or not device_id:
-        logger.warning("Connection rejected during auth: %s", reason)
+        log.warning("Auth rejected", reason=reason)
         await ws.close(code=4003, reason=reason[:120])
         return
 
     await ws.send(json.dumps({"type": "auth_ok", "device_id": device_id}))
+    log.info("Device authenticated", device_id=device_id, role=role)
+
     is_desktop = role == "desktop"
     if is_desktop:
         await _register_desktop_ws(ws)

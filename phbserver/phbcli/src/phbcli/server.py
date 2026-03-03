@@ -9,17 +9,17 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from phb_logger import Logger
 
 from .config import Config, load_state
 from .process import is_running, read_pid
 
-logger = logging.getLogger(__name__)
+log = Logger.get("HTTP")
 
 app = FastAPI(title="phbcli", version="0.1.0", docs_url=None, redoc_url=None)
 
@@ -84,4 +84,4 @@ async def run_http_server(config: Config, stop_event: asyncio.Event) -> None:
         except asyncio.CancelledError:
             pass
 
-    logger.info("HTTP server stopped.")
+    log.info("HTTP server stopped")

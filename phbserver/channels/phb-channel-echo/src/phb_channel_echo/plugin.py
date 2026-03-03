@@ -7,13 +7,13 @@ as an inbound message, prefixed with "[echo]".
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from phb_channel_sdk.base import ChannelPlugin
 from phb_channel_sdk.models import ChannelInfo, UnifiedMessage
+from phb_logger import Logger
 
-logger = logging.getLogger(__name__)
+log = Logger.get("ECHO")
 
 
 class EchoChannel(ChannelPlugin):
@@ -28,17 +28,17 @@ class EchoChannel(ChannelPlugin):
         )
 
     async def on_configure(self, config: dict[str, Any]) -> None:
-        logger.info("EchoChannel configured: %s", config)
+        log.info("EchoChannel configured", config=config)
 
     async def on_start(self) -> None:
-        logger.info("EchoChannel started.")
+        log.info("EchoChannel started")
 
     async def on_stop(self) -> None:
-        logger.info("EchoChannel stopped.")
+        log.info("EchoChannel stopped")
 
     async def send(self, message: UnifiedMessage) -> None:
         """Reflect the outbound message back as an inbound echo."""
-        logger.debug("EchoChannel send: %s", message.body)
+        log.debug("EchoChannel reflecting message", body=message.body)
         echo = message.model_copy(
             update={
                 "direction": "inbound",

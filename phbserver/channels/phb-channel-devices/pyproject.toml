@@ -15,6 +15,7 @@ dependencies = [
     "websockets>=12",
     "typer>=0.12",
     "cryptography>=43",
+    "phb-logger",
 ]
 
 [project.scripts]
@@ -25,3 +26,4 @@ packages = ["src/phb_channel_devices"]
 
 [tool.uv.sources]
 phb-channel-sdk = { workspace = true }
+phb-logger = { workspace = true }

@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import logging
 import signal
 import sys
 from pathlib import Path
@@ -19,11 +18,10 @@ from pathlib import Path
 import typer
 import websockets
 from phb_channel_sdk import log_setup
+from phb_logger import Logger
 
 from .auth import GatewayAuthManager
 from .relay import configure_auth, get_connected_devices, handle_connection
-
-logger = logging.getLogger(__name__)
 
 _DEFAULT_LOG_DIR = Path.home() / ".phbgateway" / "logs"
 
@@ -67,26 +65,30 @@ def run(
         level="DEBUG" if verbose else "INFO",
         foreground=True,
     )
+    log = Logger.get("GATEWAY")
+
     auth_manager = GatewayAuthManager(
         state_file=Path(state_dir).resolve() / "gateway_state.json",
         desktop_public_key_b64=desktop_pubkey or None,
     )
     configure_auth(auth_manager)
+
     if auth_manager.is_claimed():
-        logger.info("Gateway trust root is configured.")
+        log.info("Gateway trust root configured")
     else:
-        logger.warning(
-            "Gateway trust root is not configured yet. "
-            "Waiting for first desktop claim connection."
+        log.warning(
+            "Gateway trust root not configured — waiting for first desktop claim"
         )
+
     asyncio.run(_serve(host, port))
 
 
 async def _serve(host: str, port: int) -> None:
+    log = Logger.get("GATEWAY")
     stop_event = asyncio.Event()
 
     def _shutdown(*_: object) -> None:
-        logger.info("Shutdown signal received.")
+        log.info("Shutdown signal received")
         stop_event.set()
 
     if sys.platform != "win32":
@@ -98,13 +100,11 @@ async def _serve(host: str, port: int) -> None:
         signal.signal(signal.SIGINT, _shutdown)
 
     async with websockets.serve(handle_connection, host, port) as server:
-        logger.info("phbgateway listening on ws://%s:%d", host, port)
+        log.info("Gateway listening", url=f"ws://{host}:{port}")
         await stop_event.wait()
-        logger.info(
-            "Shutting down. Connected devices: %s", get_connected_devices()
-        )
+        log.info("Shutting down", connected_devices=get_connected_devices())
 
-    logger.info("phbgateway stopped.")
+    log.info("Gateway stopped")
 
 
 if __name__ == "__main__":

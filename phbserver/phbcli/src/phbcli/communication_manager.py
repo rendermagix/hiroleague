@@ -11,15 +11,15 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING, Any
 
 from phb_channel_sdk.models import UnifiedMessage
+from phb_logger import Logger
 
 if TYPE_CHECKING:
     from .plugin_manager import PluginManager
 
-logger = logging.getLogger(__name__)
+log = Logger.get("COMM")
 
 
 def _check_permissions(msg: UnifiedMessage) -> None:
@@ -68,34 +68,27 @@ class CommunicationManager:
         try:
             msg = UnifiedMessage.model_validate(data)
         except Exception as exc:
-            logger.warning("Dropping malformed inbound message: %s", exc)
+            log.warning("Dropping malformed inbound message", error=str(exc))
             return
 
         try:
             _check_permissions(msg)
         except PermissionError as exc:
-            logger.warning(
-                "Inbound message blocked by permission check "
-                "[channel=%s sender=%s]: %s",
-                msg.channel,
-                msg.sender_id,
-                exc,
+            log.warning(
+                "Inbound message blocked by permission check",
+                channel=msg.channel,
+                sender=msg.sender_id,
+                error=str(exc),
             )
             return
 
-        logger.debug(
-            "Inbound [channel=%s sender=%s content_type=%s]",
-            msg.channel,
-            msg.sender_id,
-            msg.content_type,
-        )
         self.inbound_queue.put_nowait(msg)
-        logger.info(
-            "Inbound message queued [msg_id=%s channel=%s sender=%s content_type=%s]",
-            msg.id,
-            msg.channel,
-            msg.sender_id,
-            msg.content_type,
+        log.info(
+            "Inbound message queued",
+            msg_id=msg.id,
+            channel=msg.channel,
+            sender=msg.sender_id,
+            content_type=msg.content_type,
         )
 
     # ------------------------------------------------------------------
@@ -105,12 +98,12 @@ class CommunicationManager:
     async def enqueue_outbound(self, msg: UnifiedMessage) -> None:
         """Place a message on the outbound queue to be sent to its channel."""
         await self.outbound_queue.put(msg)
-        logger.info(
-            "Outbound message queued [msg_id=%s channel=%s recipient=%s content_type=%s]",
-            msg.id,
-            msg.channel,
-            msg.recipient_id,
-            msg.content_type,
+        log.info(
+            "Outbound message queued",
+            msg_id=msg.id,
+            channel=msg.channel,
+            recipient=msg.recipient_id,
+            content_type=msg.content_type,
         )
 
     async def _outbound_worker(self) -> None:
@@ -121,30 +114,24 @@ class CommunicationManager:
                 try:
                     _check_permissions(msg)
                 except PermissionError as exc:
-                    logger.warning(
-                        "Outbound message blocked by permission check "
-                        "[channel=%s recipient=%s]: %s",
-                        msg.channel,
-                        msg.recipient_id,
-                        exc,
+                    log.warning(
+                        "Outbound message blocked by permission check",
+                        channel=msg.channel,
+                        recipient=msg.recipient_id,
+                        error=str(exc),
                     )
                     continue
 
-                logger.debug(
-                    "Outbound [channel=%s recipient=%s content_type=%s]",
-                    msg.channel,
-                    msg.recipient_id,
-                    msg.content_type,
-                )
                 if self._plugin_manager is None:
-                    logger.warning("Outbound message dropped: no PluginManager set.")
+                    log.warning("Outbound message dropped — no PluginManager set")
                     continue
-                logger.info(
-                    "Dispatching outbound message [msg_id=%s channel=%s recipient=%s content_type=%s]",
-                    msg.id,
-                    msg.channel,
-                    msg.recipient_id,
-                    msg.content_type,
+
+                log.info(
+                    "Dispatching outbound message",
+                    msg_id=msg.id,
+                    channel=msg.channel,
+                    recipient=msg.recipient_id,
+                    content_type=msg.content_type,
                 )
                 await self._plugin_manager.send_to_channel(
                     msg.channel, msg.model_dump(mode="json")
@@ -158,5 +145,5 @@ class CommunicationManager:
 
     async def run(self) -> None:
         """Run the outbound worker. Add to asyncio.gather alongside PluginManager."""
-        logger.info("CommunicationManager started.")
+        log.info("CommunicationManager started")
         await self._outbound_worker()
