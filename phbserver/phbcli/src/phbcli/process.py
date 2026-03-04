@@ -1,6 +1,7 @@
-"""PID file-based process management for the phbcli server.
+"""PID file-based process management for the phbcli server and local gateway.
 
 Supports Windows (taskkill) and Unix (SIGTERM).
+All functions are workspace-scoped — they accept workspace_path: Path.
 """
 
 from __future__ import annotations
@@ -11,33 +12,75 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .config import PID_FILE
+
+# ---------------------------------------------------------------------------
+# Path helpers
+# ---------------------------------------------------------------------------
+
+def workspace_pid_file(workspace_path: Path) -> Path:
+    return workspace_path / "phbcli.pid"
 
 
-def write_pid(pid: int | None = None) -> None:
+def workspace_gateway_pid_file(workspace_path: Path) -> Path:
+    return workspace_path / "gateway.pid"
+
+
+# ---------------------------------------------------------------------------
+# Server PID
+# ---------------------------------------------------------------------------
+
+def write_pid(workspace_path: Path, pid: int | None = None) -> None:
     pid = pid or os.getpid()
-    PID_FILE.write_text(str(pid), encoding="utf-8")
+    workspace_pid_file(workspace_path).write_text(str(pid), encoding="utf-8")
 
 
-def read_pid() -> int | None:
-    if not PID_FILE.exists():
+def read_pid(workspace_path: Path) -> int | None:
+    pid_file = workspace_pid_file(workspace_path)
+    if not pid_file.exists():
         return None
     try:
-        return int(PID_FILE.read_text(encoding="utf-8").strip())
+        return int(pid_file.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return None
 
 
-def remove_pid() -> None:
+def remove_pid(workspace_path: Path) -> None:
     try:
-        PID_FILE.unlink(missing_ok=True)
+        workspace_pid_file(workspace_path).unlink(missing_ok=True)
     except OSError:
         pass
 
 
-def is_running(pid: int | None = None) -> bool:
-    if pid is None:
-        pid = read_pid()
+# ---------------------------------------------------------------------------
+# Gateway PID
+# ---------------------------------------------------------------------------
+
+def write_gateway_pid(workspace_path: Path, pid: int) -> None:
+    workspace_gateway_pid_file(workspace_path).write_text(str(pid), encoding="utf-8")
+
+
+def read_gateway_pid(workspace_path: Path) -> int | None:
+    pid_file = workspace_gateway_pid_file(workspace_path)
+    if not pid_file.exists():
+        return None
+    try:
+        return int(pid_file.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
+        return None
+
+
+def remove_gateway_pid(workspace_path: Path) -> None:
+    try:
+        workspace_gateway_pid_file(workspace_path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Process utilities
+# ---------------------------------------------------------------------------
+
+def is_running(pid: int | None) -> bool:
     if pid is None:
         return False
     if sys.platform == "win32":
@@ -59,7 +102,7 @@ def is_running(pid: int | None = None) -> bool:
 
 
 def kill_process(pid: int) -> bool:
-    """Send termination signal to process. Returns True if signal was sent."""
+    """Send termination signal. Returns True if the signal was sent."""
     try:
         if sys.platform == "win32":
             subprocess.run(
@@ -74,15 +117,33 @@ def kill_process(pid: int) -> bool:
         return False
 
 
-def stop_server() -> bool:
-    """Stop the running server. Returns True if it was stopped, False if not running."""
-    pid = read_pid()
+# ---------------------------------------------------------------------------
+# High-level stop helpers
+# ---------------------------------------------------------------------------
+
+def stop_server(workspace_path: Path) -> bool:
+    """Stop the server for the given workspace. Returns True if stopped."""
+    pid = read_pid(workspace_path)
     if pid is None:
         return False
     if not is_running(pid):
-        remove_pid()
+        remove_pid(workspace_path)
         return False
     killed = kill_process(pid)
     if killed:
-        remove_pid()
+        remove_pid(workspace_path)
+    return killed
+
+
+def stop_gateway(workspace_path: Path) -> bool:
+    """Stop the local gateway for the given workspace. Returns True if stopped."""
+    pid = read_gateway_pid(workspace_path)
+    if pid is None:
+        return False
+    if not is_running(pid):
+        remove_gateway_pid(workspace_path)
+        return False
+    killed = kill_process(pid)
+    if killed:
+        remove_gateway_pid(workspace_path)
     return killed

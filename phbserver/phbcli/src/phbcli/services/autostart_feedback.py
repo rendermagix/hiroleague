@@ -14,14 +14,19 @@ from ..autostart import (
 )
 
 
-def register_autostart_with_feedback(console: Console, *, elevated: bool = False) -> None:
-    """Register auto-start and print a user-friendly summary."""
+def register_autostart_with_feedback(
+    console: Console,
+    workspace_name: str,
+    *,
+    elevated: bool = False,
+) -> None:
+    """Register auto-start for a workspace and print a user-friendly summary."""
     if elevated and sys.platform == "win32":
         console.print(
             "[dim]Requesting UAC elevation to create a high-privilege task…[/dim]"
         )
         try:
-            accepted = register_autostart_elevated()
+            accepted = register_autostart_elevated(workspace_name)
         except RuntimeError as exc:
             console.print(f"[yellow]Elevated task creation failed: {exc}[/yellow]")
             accepted = False
@@ -36,15 +41,15 @@ def register_autostart_with_feedback(console: Console, *, elevated: bool = False
                 "[yellow]UAC prompt was cancelled or failed. "
                 "Falling back to standard auto-start…[/yellow]"
             )
-            register_autostart_standard(console)
+            register_autostart_standard(console, workspace_name)
     else:
-        register_autostart_standard(console)
+        register_autostart_standard(console, workspace_name)
 
 
-def register_autostart_standard(console: Console) -> None:
+def register_autostart_standard(console: Console, workspace_name: str) -> None:
     """Try schtasks (LIMITED), fall back to registry, and report method."""
     try:
-        method = register_autostart()
+        method = register_autostart(workspace_name)
     except NotImplementedError as exc:
         console.print(f"[yellow]Auto-start skipped: {exc}[/yellow]")
         return
@@ -67,15 +72,18 @@ def register_autostart_standard(console: Console) -> None:
 
 
 def unregister_autostart_with_feedback(
-    console: Console, *, elevated: bool = False
+    console: Console,
+    workspace_name: str,
+    *,
+    elevated: bool = False,
 ) -> None:
-    """Unregister auto-start and print a user-friendly summary."""
+    """Unregister auto-start for a workspace and print a user-friendly summary."""
     if elevated and sys.platform == "win32":
         console.print(
             "[dim]Requesting UAC elevation to delete high-privilege task…[/dim]"
         )
         try:
-            accepted = unregister_autostart_elevated()
+            accepted = unregister_autostart_elevated(workspace_name)
         except RuntimeError as exc:
             console.print(f"[yellow]Elevated teardown failed: {exc}[/yellow]")
             accepted = False
@@ -89,15 +97,15 @@ def unregister_autostart_with_feedback(
                 "[yellow]UAC prompt was cancelled. "
                 "Falling back to standard unregister…[/yellow]"
             )
-            unregister_autostart_standard(console)
+            unregister_autostart_standard(console, workspace_name)
     else:
-        unregister_autostart_standard(console)
+        unregister_autostart_standard(console, workspace_name)
 
 
-def unregister_autostart_standard(console: Console) -> None:
+def unregister_autostart_standard(console: Console, workspace_name: str) -> None:
     """Remove auto-start registrations and print outcome."""
     try:
-        unregister_autostart()
+        unregister_autostart(workspace_name)
         console.print("[green]Auto-start removed[/green] (Task Scheduler + Registry).")
     except NotImplementedError as exc:
         console.print(f"[yellow]Auto-start removal skipped: {exc}[/yellow]")

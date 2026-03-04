@@ -1,0 +1,10 @@
+---
+description: 
+alwaysApply: true
+---
+
+we are in initial development mode:
+- No Backward compatibility is required unless clearly mentioned.
+- No Migration is required unless clearly mentioned.
+- No Wrappers when refactoring code unless clearly mentioned.
+- Always mention that we're abiding to this rule.

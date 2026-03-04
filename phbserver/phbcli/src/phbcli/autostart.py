@@ -1,12 +1,16 @@
-"""Auto-start registration for phbcli.
+"""Auto-start registration for phbcli — workspace-aware.
+
+Each workspace gets its own task/registry entry so that multiple workspaces
+can independently auto-start at login.
+
+Entry names:
+  Task Scheduler task:  phbcli-<workspace_name>
+  Registry Run key:     phbcli-<workspace_name>
 
 Windows strategy (in order):
   1. schtasks /Create /SC ONLOGON /RL LIMITED  — preferred; user-scoped task.
      If this fails (Access Denied on some Win10/11 configs) →
   2. Registry HKCU\\...\\Run key — always works, no elevation required.
-
-A separate `register_autostart_elevated()` is provided for callers that can
-trigger a UAC prompt and want a /RL HIGHEST task instead.
 
 Stubs for macOS (launchd) and Linux (systemd) are provided for future use.
 """
@@ -24,11 +28,21 @@ if sys.platform == "win32":
 else:
     winreg = None  # type: ignore[assignment]
 
-TASK_NAME = "phbcli-server"
 REG_RUN_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
-REG_RUN_KEY = "phbcli-server"
 
 AutostartMethod = Literal["schtasks", "registry", "none"]
+
+
+# ---------------------------------------------------------------------------
+# Name helpers
+# ---------------------------------------------------------------------------
+
+def _task_name(workspace_name: str) -> str:
+    return f"phbcli-{workspace_name}"
+
+
+def _reg_run_key(workspace_name: str) -> str:
+    return f"phbcli-{workspace_name}"
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +61,6 @@ def _phbcli_executable() -> str:
 
 
 def _is_admin() -> bool:
-    """Return True if the current process is running with admin privileges."""
     if sys.platform != "win32":
         return False
     try:
@@ -60,13 +73,12 @@ def _is_admin() -> bool:
 # Windows — Task Scheduler
 # ---------------------------------------------------------------------------
 
-def _schtasks_create(exe: str, run_level: str = "LIMITED") -> bool:
-    """Create a Task Scheduler ONLOGON task. Returns True on success."""
+def _schtasks_create(exe: str, workspace_name: str, run_level: str = "LIMITED") -> bool:
+    task = _task_name(workspace_name)
     cmd = [
-        "schtasks",
-        "/Create",
-        "/TN", TASK_NAME,
-        "/TR", f'"{exe}" start',
+        "schtasks", "/Create",
+        "/TN", task,
+        "/TR", f'"{exe}" start --workspace {workspace_name}',
         "/SC", "ONLOGON",
         "/RL", run_level,
         "/F",
@@ -75,10 +87,9 @@ def _schtasks_create(exe: str, run_level: str = "LIMITED") -> bool:
     return result.returncode == 0
 
 
-def _schtasks_delete() -> bool:
-    """Delete the Task Scheduler task. Returns True on success or if not found."""
+def _schtasks_delete(workspace_name: str) -> bool:
     result = subprocess.run(
-        ["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
+        ["schtasks", "/Delete", "/TN", _task_name(workspace_name), "/F"],
         capture_output=True,
         text=True,
     )
@@ -86,20 +97,26 @@ def _schtasks_delete() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Windows — Registry Run key (no elevation required)
+# Windows — Registry Run key
 # ---------------------------------------------------------------------------
 
-def _registry_create(exe: str) -> None:
+def _registry_create(exe: str, workspace_name: str) -> None:
     with winreg.OpenKey(
         winreg.HKEY_CURRENT_USER,
         REG_RUN_PATH,
         0,
         winreg.KEY_SET_VALUE,
     ) as key:
-        winreg.SetValueEx(key, REG_RUN_KEY, 0, winreg.REG_SZ, f'"{exe}" start')
+        winreg.SetValueEx(
+            key,
+            _reg_run_key(workspace_name),
+            0,
+            winreg.REG_SZ,
+            f'"{exe}" start --workspace {workspace_name}',
+        )
 
 
-def _registry_delete() -> None:
+def _registry_delete(workspace_name: str) -> None:
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
@@ -107,58 +124,40 @@ def _registry_delete() -> None:
             0,
             winreg.KEY_SET_VALUE,
         ) as key:
-            winreg.DeleteValue(key, REG_RUN_KEY)
+            winreg.DeleteValue(key, _reg_run_key(workspace_name))
     except FileNotFoundError:
         pass
 
 
-def _registry_exists() -> bool:
+def _registry_exists(workspace_name: str) -> bool:
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER, REG_RUN_PATH, 0, winreg.KEY_READ
         ) as key:
-            winreg.QueryValueEx(key, REG_RUN_KEY)
+            winreg.QueryValueEx(key, _reg_run_key(workspace_name))
         return True
     except FileNotFoundError:
         return False
 
 
 # ---------------------------------------------------------------------------
-# Windows — UAC-elevated schtasks (for HIGHEST run level)
+# Windows — UAC-elevated schtasks
 # ---------------------------------------------------------------------------
 
-def _elevate_schtasks_create(exe: str) -> bool:
-    """
-    Launch schtasks elevated via UAC (ShellExecuteW runas).
-    Blocks until the elevated process exits.
-    Returns True if UAC was accepted and task created successfully.
-    """
+def _elevate_schtasks_create(exe: str, workspace_name: str) -> bool:
+    task = _task_name(workspace_name)
     args = (
-        f'/Create /TN "{TASK_NAME}" /TR "\\"{exe}\\" start" '
+        f'/Create /TN "{task}" '
+        f'/TR "\\"{exe}\\" start --workspace {workspace_name}" '
         f"/SC ONLOGON /RL HIGHEST /F"
     )
-    ret = ctypes.windll.shell32.ShellExecuteW(
-        None,       # hwnd
-        "runas",    # verb — triggers UAC
-        "schtasks", # file
-        args,       # parameters
-        None,       # directory
-        1,          # SW_SHOWNORMAL
-    )
-    # ShellExecuteW returns > 32 on success
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "schtasks", args, None, 1)
     return int(ret) > 32
 
 
-def _elevate_schtasks_delete() -> bool:
-    """
-    Delete the Task Scheduler task elevated via UAC.
-    Needed when the task was originally created with /RL HIGHEST.
-    Returns True if UAC was accepted.
-    """
-    args = f'/Delete /TN "{TASK_NAME}" /F'
-    ret = ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", "schtasks", args, None, 1
-    )
+def _elevate_schtasks_delete(workspace_name: str) -> bool:
+    args = f'/Delete /TN "{_task_name(workspace_name)}" /F'
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "schtasks", args, None, 1)
     return int(ret) > 32
 
 
@@ -166,33 +165,27 @@ def _elevate_schtasks_delete() -> bool:
 # Windows — main register/unregister with fallback chain
 # ---------------------------------------------------------------------------
 
-def _register_windows(exe: str) -> AutostartMethod:
-    """
-    Try schtasks first; fall back to registry on failure.
-    Returns the method that succeeded.
-    """
-    if _schtasks_create(exe, run_level="LIMITED"):
+def _register_windows(exe: str, workspace_name: str) -> AutostartMethod:
+    if _schtasks_create(exe, workspace_name, run_level="LIMITED"):
         return "schtasks"
-
-    # schtasks failed (likely Access Denied) — use registry fallback
-    _registry_create(exe)
+    _registry_create(exe, workspace_name)
     return "registry"
 
 
-def _unregister_windows() -> None:
-    _schtasks_delete()
-    _registry_delete()
+def _unregister_windows(workspace_name: str) -> None:
+    _schtasks_delete(workspace_name)
+    _registry_delete(workspace_name)
 
 
 # ---------------------------------------------------------------------------
 # macOS (stub)
 # ---------------------------------------------------------------------------
 
-def _register_macos(_exe: str) -> AutostartMethod:
+def _register_macos(_exe: str, _workspace_name: str) -> AutostartMethod:
     raise NotImplementedError("macOS launchd auto-start is not yet implemented.")
 
 
-def _unregister_macos() -> None:
+def _unregister_macos(_workspace_name: str) -> None:
     raise NotImplementedError("macOS launchd auto-start is not yet implemented.")
 
 
@@ -200,11 +193,11 @@ def _unregister_macos() -> None:
 # Linux (stub)
 # ---------------------------------------------------------------------------
 
-def _register_linux(_exe: str) -> AutostartMethod:
+def _register_linux(_exe: str, _workspace_name: str) -> AutostartMethod:
     raise NotImplementedError("Linux systemd auto-start is not yet implemented.")
 
 
-def _unregister_linux() -> None:
+def _unregister_linux(_workspace_name: str) -> None:
     raise NotImplementedError("Linux systemd auto-start is not yet implemented.")
 
 
@@ -212,59 +205,40 @@ def _unregister_linux() -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
-def register_autostart() -> AutostartMethod:
-    """
-    Register phbcli to start automatically on user login.
-
-    Returns the method used: 'schtasks' | 'registry'.
-    On Windows the function never raises — it always succeeds via the
-    registry fallback.
-    """
+def register_autostart(workspace_name: str) -> AutostartMethod:
+    """Register phbcli to start automatically on user login for the given workspace."""
     exe = _phbcli_executable()
     if sys.platform == "win32":
-        return _register_windows(exe)
+        return _register_windows(exe, workspace_name)
     elif sys.platform == "darwin":
-        return _register_macos(exe)
+        return _register_macos(exe, workspace_name)
     else:
-        return _register_linux(exe)
+        return _register_linux(exe, workspace_name)
 
 
-def register_autostart_elevated() -> bool:
-    """
-    Windows only: register a /RL HIGHEST (elevated) task via UAC prompt.
-
-    Shows a UAC dialog. Returns True if the user accepted and the task
-    was created, False if they cancelled.
-    Raises RuntimeError on non-Windows platforms.
-    """
+def register_autostart_elevated(workspace_name: str) -> bool:
+    """Windows only: register a /RL HIGHEST task via UAC prompt."""
     if sys.platform != "win32":
         raise RuntimeError("Elevated auto-start is only supported on Windows.")
     exe = _phbcli_executable()
-    return _elevate_schtasks_create(exe)
+    return _elevate_schtasks_create(exe, workspace_name)
 
 
-def unregister_autostart() -> None:
-    """Remove all auto-start registrations (both schtasks and registry)."""
+def unregister_autostart(workspace_name: str) -> None:
+    """Remove auto-start registrations for the given workspace."""
     if sys.platform == "win32":
-        _unregister_windows()
+        _unregister_windows(workspace_name)
     elif sys.platform == "darwin":
-        _unregister_macos()
+        _unregister_macos(workspace_name)
     else:
-        _unregister_linux()
+        _unregister_linux(workspace_name)
 
 
-def unregister_autostart_elevated() -> bool:
-    """
-    Windows only: delete the Task Scheduler task via UAC prompt.
-
-    Use this when the task was originally created with --elevated-task
-    (/RL HIGHEST) and a standard delete fails with Access Denied.
-    Returns True if UAC was accepted, False if cancelled.
-    Raises RuntimeError on non-Windows platforms.
-    """
+def unregister_autostart_elevated(workspace_name: str) -> bool:
+    """Windows only: delete the Task Scheduler task via UAC prompt."""
     if sys.platform != "win32":
         raise RuntimeError("Elevated teardown is only supported on Windows.")
-    accepted = _elevate_schtasks_delete()
+    accepted = _elevate_schtasks_delete(workspace_name)
     if accepted:
-        _registry_delete()  # always clean up registry too
+        _registry_delete(workspace_name)
     return accepted

@@ -30,6 +30,7 @@ dependencies = [
     "langchain>=1.0",
     "langgraph>=1.0",
     "langchain-openai>=0.3",
+    "platformdirs>=4",
     "phb-channel-sdk",
     "phb-commons",
 ]

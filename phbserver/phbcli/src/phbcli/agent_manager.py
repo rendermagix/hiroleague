@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from phb_channel_sdk.models import UnifiedMessage
@@ -63,8 +64,9 @@ class AgentManager:
         await asyncio.gather(..., agent_mgr.run())
     """
 
-    def __init__(self, comm_manager: CommunicationManager) -> None:
+    def __init__(self, comm_manager: CommunicationManager, workspace_path: Path) -> None:
         self._comm = comm_manager
+        self._workspace_path = workspace_path
         self._agent = self._build_agent()
 
     def _build_agent(self):
@@ -72,8 +74,8 @@ class AgentManager:
         from langchain.chat_models import init_chat_model
         from langgraph.checkpoint.memory import InMemorySaver
 
-        config = load_agent_config()
-        system_prompt = load_system_prompt()
+        config = load_agent_config(self._workspace_path)
+        system_prompt = load_system_prompt(self._workspace_path)
 
         log.info(
             "Building agent",

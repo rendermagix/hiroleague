@@ -40,6 +40,5 @@ Markdown Table:
 
 # Projects to Watch for Inspiration
 
-- [OpenClaw](https://github.com/openclaw/openclaw)
-
-  
+  [Ouroboros](https://github.com/razzant/ouroboros?tab=readme-ov-file)
+  [OpenClaw](https://github.com/openclaw/openclaw)

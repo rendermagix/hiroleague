@@ -17,6 +17,7 @@ import subprocess
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import websockets
@@ -24,7 +25,7 @@ from websockets.asyncio.server import ServerConnection
 from websockets.exceptions import ConnectionClosed
 from phb_commons.log import Logger
 
-from .channel_config import ChannelConfig, list_enabled_channels
+from .channel_config import ChannelConfig, list_enabled_channels, load_channel_config
 from .config import Config, resolve_log_dir
 from . import rpc_helpers as rpc
 
@@ -46,11 +47,13 @@ class PluginManager:
     def __init__(
         self,
         config: Config,
+        workspace_path: Path,
         stop_event: asyncio.Event,
         on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         on_event: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
+        self._workspace_path = workspace_path
         self._stop_event = stop_event
         self._on_message = on_message
         self._on_event = on_event
@@ -80,7 +83,7 @@ class PluginManager:
     # ------------------------------------------------------------------
 
     async def _spawn_channels(self) -> None:
-        channels = list_enabled_channels()
+        channels = list_enabled_channels(self._workspace_path)
         if not channels:
             log.info("No enabled channel plugins configured")
             return
@@ -90,7 +93,7 @@ class PluginManager:
             await self._spawn_one(ch, phb_ws)
 
     async def _spawn_one(self, ch: ChannelConfig, phb_ws: str) -> None:
-        log_dir = resolve_log_dir(self._config)
+        log_dir = resolve_log_dir(self._workspace_path, self._config)
         cmd = ch.effective_command() + [
             "--phb-ws", phb_ws,
             "--log-dir", str(log_dir),
@@ -256,9 +259,7 @@ class PluginManager:
                 fut.set_result(data.get("result"))
 
     async def _push_config(self, channel_name: str) -> None:
-        from .channel_config import load_channel_config
-
-        cfg = load_channel_config(channel_name)
+        cfg = load_channel_config(self._workspace_path, channel_name)
         payload = dict(cfg.config) if cfg else {}
         if channel_name == "devices":
             payload.setdefault("gateway_url", self._config.gateway_url)
@@ -274,7 +275,6 @@ class PluginManager:
     async def send_to_channel(
         self, channel_name: str, message: dict[str, Any]
     ) -> None:
-        """Send a channel.send notification to a specific plugin."""
         ch = self._channels.get(channel_name)
         if ch is None:
             log.warning("Cannot send to channel — not connected", channel=channel_name)
@@ -282,7 +282,6 @@ class PluginManager:
         await ch.ws.send(rpc.build_notification("channel.send", message))
 
     async def broadcast(self, message: dict[str, Any]) -> None:
-        """Send a channel.send notification to all connected plugins."""
         for ch in list(self._channels.values()):
             try:
                 await ch.ws.send(rpc.build_notification("channel.send", message))
@@ -292,7 +291,6 @@ class PluginManager:
     async def configure_channel(
         self, channel_name: str, config: dict[str, Any]
     ) -> None:
-        """Push credentials/config to a specific plugin."""
         ch = self._channels.get(channel_name)
         if ch is None:
             return
@@ -303,7 +301,6 @@ class PluginManager:
     async def send_event_to_channel(
         self, channel_name: str, event: str, data: dict[str, Any]
     ) -> None:
-        """Send an event notification to a specific plugin."""
         ch = self._channels.get(channel_name)
         if ch is None:
             log.warning(
@@ -318,7 +315,6 @@ class PluginManager:
         )
 
     async def probe_channel(self, channel_name: str) -> dict[str, Any] | None:
-        """Send channel.status and await the response."""
         ch = self._channels.get(channel_name)
         if ch is None:
             return None
@@ -347,3 +343,4 @@ class PluginManager:
             }
             for ch in self._channels.values()
         ]
+

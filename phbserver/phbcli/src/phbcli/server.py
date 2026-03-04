@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -23,20 +24,26 @@ log = Logger.get("HTTP")
 
 app = FastAPI(title="phbcli", version="0.1.0", docs_url=None, redoc_url=None)
 
-# Injected by _server_process.py after PluginManager is created.
+# Injected by _server_process.py before the server starts.
+_workspace_path: Path | None = None
 _get_channel_info: Callable[[], list[dict[str, str]]] | None = None
 
 
+def set_workspace_path(path: Path) -> None:
+    global _workspace_path
+    _workspace_path = path
+
+
 def set_channel_info_provider(fn: Callable[[], list[dict[str, str]]]) -> None:
-    """Register a callback that returns info about connected channel plugins."""
     global _get_channel_info
     _get_channel_info = fn
 
 
 @app.get("/status")
 async def get_status() -> JSONResponse:
-    state = load_state()
-    pid = read_pid()
+    assert _workspace_path is not None, "workspace_path not initialised"
+    state = load_state(_workspace_path)
+    pid = read_pid(_workspace_path)
     return JSONResponse(
         {
             "running": is_running(pid),
@@ -61,7 +68,7 @@ async def run_http_server(config: Config, stop_event: asyncio.Event) -> None:
         host=config.http_host,
         port=config.http_port,
         log_level="warning",
-        loop="none",  # use the existing event loop
+        loop="none",
     )
     server = uvicorn.Server(uv_config)
 
