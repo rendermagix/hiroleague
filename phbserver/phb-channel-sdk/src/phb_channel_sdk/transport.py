@@ -24,7 +24,7 @@ from uuid import uuid4
 
 import websockets
 from websockets.exceptions import ConnectionClosed
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from . import rpc
 from .base import ChannelPlugin

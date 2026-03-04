@@ -15,7 +15,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from phb_logger import Logger
+from phb_commons.attestation import create_device_attestation
+from phb_commons.log import Logger
 
 log = Logger.get("SERVER")
 
@@ -49,7 +50,7 @@ async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
 async def _main(foreground: bool = False) -> None:
     from phb_channel_sdk import log_setup
     from phbcli.config import APP_DIR, load_config, mark_connected, mark_disconnected, resolve_log_dir
-    from phbcli.crypto import create_device_attestation, load_or_create_master_key
+    from phbcli.crypto import load_or_create_master_key
     from phbcli.pairing import (
         ApprovedDevice,
         clear_pairing_session,

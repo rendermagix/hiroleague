@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "phb-commons"
+version = "0.1.0"
+description = "Private Home Box shared commons utilities"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["private-home-box", "commons", "crypto", "utils"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "cryptography>=43",
+    "structlog>=25",
+    "colorama>=0.4.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/phb_commons"]

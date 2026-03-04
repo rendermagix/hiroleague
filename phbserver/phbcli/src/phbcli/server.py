@@ -14,7 +14,7 @@ from collections.abc import Callable
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from .config import Config, load_state
 from .process import is_running, read_pid

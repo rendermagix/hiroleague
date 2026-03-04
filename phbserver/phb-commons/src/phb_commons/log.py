@@ -1,13 +1,17 @@
+"""Shared PHB structured logging."""
+
+from __future__ import annotations
+
+import contextvars
 import logging
 import logging.handlers
 import sys
 import traceback
-import contextvars
 from contextlib import contextmanager
 from typing import Mapping
 
-import structlog
 import colorama
+import structlog
 
 colorama.init(autoreset=True)
 
@@ -19,10 +23,6 @@ __all__ = [
     "disable",
     "enable",
 ]
-
-# ---------------------------------------------------------------------------
-# Colour helpers / renderer
-# ---------------------------------------------------------------------------
 
 _LEVEL_ABBREV = {
     "DEBUG": "DBG",
@@ -47,21 +47,12 @@ _MODULE_PALETTE = [
     colorama.Fore.GREEN,
 ]
 
-# ---------------------------------------------------------------------------
-# Indentation support (context-local)
-# ---------------------------------------------------------------------------
-
-_INDENT_LEVEL: contextvars.ContextVar[int] = contextvars.ContextVar("indent_level", default=0)
+_INDENT_LEVEL: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "indent_level", default=0
+)
 _INDENT_UNIT: str = "--"
 
-# ---------------------------------------------------------------------------
-# File sinks and per-logger level overrides
-# ---------------------------------------------------------------------------
-
 _FILE_SINKS: list[tuple[int, logging.Handler, object]] = []
-
-# Maps logger name prefix → minimum numeric level.  Populated via
-# Logger.apply_level_overrides() from config at startup.
 _LEVEL_OVERRIDES: dict[str, int] = {}
 
 
@@ -84,7 +75,6 @@ class _ColourRenderer:
             module_disp = module_raw.ljust(12, "_")
 
         message = event_dict.pop("event", "")
-
         indent_level: int = _INDENT_LEVEL.get()
         indent_prefix = _INDENT_UNIT * max(indent_level, 0)
         if indent_prefix:
@@ -93,7 +83,6 @@ class _ColourRenderer:
         lvl_abbr = _LEVEL_ABBREV.get(level, level[:3])
         lvl_color = _LEVEL_COLORS.get(level, colorama.Fore.WHITE)
         module_color = _pick_module_color(module)
-
         kv_str = " ".join(f"{k}={v}" for k, v in event_dict.items())
 
         parts = [
@@ -105,7 +94,6 @@ class _ColourRenderer:
 
         if kv_str:
             parts.append(colorama.Style.DIM + " " + kv_str)
-
         parts.append(colorama.Style.RESET_ALL)
         return " ".join(parts)
 
@@ -122,7 +110,6 @@ class _PlainRenderer:
             module_disp = module_raw.ljust(12, "_")
 
         message = event_dict.pop("event", "")
-
         indent_level: int = _INDENT_LEVEL.get()
         indent_prefix = _INDENT_UNIT * max(indent_level, 0)
         if indent_prefix:
@@ -137,22 +124,20 @@ class _PlainRenderer:
             f"[{module_disp}]",
             message,
         ]
-
         if kv_str:
             parts.append(" " + kv_str)
-
         return " ".join(parts)
 
 
 class _NullRenderer:
-    """Discards all console output; used when console=False (background processes)."""
+    """Discards all console output; used when console=False."""
 
     def __call__(self, logger, method_name, event_dict):
         raise structlog.DropEvent()
 
 
 def _module_level_filter(logger, method_name, event_dict):
-    """Drop events that fall below the configured per-module level override."""
+    """Drop events below configured per-module level overrides."""
     if not _LEVEL_OVERRIDES:
         return event_dict
 
@@ -160,13 +145,11 @@ def _module_level_filter(logger, method_name, event_dict):
     level_name = str(event_dict.get("level", "")).upper()
     event_level = logging._nameToLevel.get(level_name, logging.INFO)
 
-    # Longest matching prefix wins
     for prefix in sorted(_LEVEL_OVERRIDES.keys(), key=len, reverse=True):
         if module == prefix or module.startswith(prefix + ".") or module.startswith(prefix):
             if event_level < _LEVEL_OVERRIDES[prefix]:
                 raise structlog.DropEvent()
             break
-
     return event_dict
 
 
@@ -195,11 +178,12 @@ def _emit_to_file_sinks(logger, method_name, event_dict):
             try:
                 copy_for_file = dict(event_dict)
                 rendered = renderer(None, method_name, copy_for_file)
-
                 if event_level >= logging.ERROR and exc_info is not None:
                     try:
                         tb_lines = traceback.format_exception(*exc_info)
-                        tb_one_line = " | ".join(line.strip() for line in tb_lines if line and line.strip())
+                        tb_one_line = " | ".join(
+                            line.strip() for line in tb_lines if line and line.strip()
+                        )
                         if tb_one_line:
                             rendered = f"{rendered} exception={tb_one_line}"
                     except Exception:
@@ -217,7 +201,6 @@ def _emit_to_file_sinks(logger, method_name, event_dict):
                 handler.handle(record)
             except Exception:
                 pass
-
     return event_dict
 
 
@@ -233,24 +216,10 @@ def _strip_exception_for_console(logger, method_name, event_dict):
 
 
 class Logger:
-    """Central logging facility for PHB.
-
-    Call ``Logger.configure()`` once at process startup (or use the
-    ``log_setup.init()`` shim which does this for you), then obtain
-    per-module loggers with ``Logger.get("MODULE_NAME")``.
-
-    Examples
-    --------
-    >>> Logger.configure(level="DEBUG", console=True)
-    >>> log = Logger.get("GATEWAY")
-    >>> log.info("Gateway started", host="0.0.0.0", port=8765)
-    >>> with Logger.indent():
-    ...     log.debug("Nested detail")
-    """
+    """Central logging facility for PHB."""
 
     _DEFAULT_LEVEL = "INFO"
     _configured: bool = False
-
     _LEVELS: Mapping[str, int] = {
         name: level for name, level in logging._nameToLevel.items()
     }
@@ -272,21 +241,7 @@ class Logger:
         enabled: bool = True,
         console: bool = True,
     ):
-        """One-time global logger configuration.
-
-        Parameters
-        ----------
-        level:
-            Root log level (e.g. ``"DEBUG"``).
-        json:
-            Emit JSON lines instead of colourised human output.
-        enabled:
-            ``False`` suppresses every log call (useful for tests).
-        console:
-            ``False`` disables all console/stdout output.  File sinks added
-            via ``add_file_sink()`` still receive events.  Use for background
-            processes that should not write to a terminal.
-        """
+        """One-time global logger configuration."""
         if cls._configured:
             return
 
@@ -330,12 +285,11 @@ class Logger:
             context_class=dict,
             cache_logger_on_first_use=True,
         )
-
         cls._configured = True
 
     @classmethod
     def get(cls, name: str | None = None):
-        """Return a bound structlog logger, auto-configuring with defaults if needed."""
+        """Return a bound logger, auto-configuring with defaults if needed."""
         if not cls._configured:
             cls.configure()
         if name is None:
@@ -344,23 +298,13 @@ class Logger:
 
     @classmethod
     def apply_level_overrides(cls, overrides: dict[str, str]) -> None:
-        """Apply per-logger level overrides from config.
-
-        Parameters
-        ----------
-        overrides:
-            Mapping of logger name (or prefix) to level string, e.g.
-            ``{"AGENT": "DEBUG", "COMM": "WARNING"}``.
-        """
-        global _LEVEL_OVERRIDES
+        """Apply per-logger level overrides."""
         for name, level_str in overrides.items():
-            numeric = cls._determine_level(level_str)
-            _LEVEL_OVERRIDES[name] = numeric
+            _LEVEL_OVERRIDES[name] = cls._determine_level(level_str)
 
     @classmethod
     def set_level(cls, name: str, level: str | int):
-        numeric = cls._determine_level(level)
-        logging.getLogger(name).setLevel(numeric)
+        logging.getLogger(name).setLevel(cls._determine_level(level))
 
     @classmethod
     def disable(cls):
@@ -384,15 +328,12 @@ class Logger:
         backup_count: int = 5,
         use_json: bool = False,
     ) -> logging.Handler:
-        """Mirror log events at or above *level* into a file.
-
-        Returns the created handler so callers may remove it later via
-        ``remove_file_sink()``.
-        """
+        """Mirror log events at or above *level* into a file."""
         if not cls._configured:
             cls.configure()
 
         import os
+
         directory = os.path.dirname(path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
@@ -411,10 +352,8 @@ class Logger:
 
         handler.setLevel(min_level)
         handler.setFormatter(logging.Formatter("%(message)s"))
-
         renderer = structlog.processors.JSONRenderer() if use_json else _PlainRenderer()
         _FILE_SINKS.append((min_level, handler, renderer))
-
         logging.getLogger().addHandler(handler)
         return handler
 
@@ -443,13 +382,15 @@ class Logger:
     @classmethod
     @contextmanager
     def indent(cls, steps: int = 1):
-        """Context manager that visually indents nested log output.
-
-        Indentation is stored in a ``contextvars.ContextVar`` so it is
-        task-local in async code.
-        """
         token = _INDENT_LEVEL.set(_INDENT_LEVEL.get() + steps)
         try:
             yield
         finally:
             _INDENT_LEVEL.reset(token)
+
+
+configure = Logger.configure
+get_logger = Logger.get
+set_level = Logger.set_level
+disable = Logger.disable
+enable = Logger.enable

@@ -2,44 +2,15 @@
 
 from __future__ import annotations
 
-import base64
 import json
-import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-
-
-def _b64_decode(data: str) -> bytes:
-    return base64.b64decode(data.encode("ascii"), validate=True)
-
-
-def _b64_encode(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
-
-
-def _parse_iso8601_utc(value: str) -> datetime:
-    normalized = value.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(normalized)
-    if dt.tzinfo is None:
-        raise ValueError("timestamp must include timezone")
-    return dt.astimezone(UTC)
-
-
-def _load_public_key_b64(public_key_b64: str) -> Ed25519PublicKey:
-    raw = _b64_decode(public_key_b64)
-    if len(raw) != 32:
-        raise ValueError("Ed25519 public key must be exactly 32 bytes")
-    return Ed25519PublicKey.from_public_bytes(raw)
-
-
-def generate_nonce() -> str:
-    """Create a random challenge nonce encoded as hex."""
-    return secrets.token_hex(32)
+from phb_commons.attestation import verify_device_attestation
+from phb_commons.keys import load_public_key_b64, public_key_to_b64
+from phb_commons.signing import verify_signature
+from phb_commons.timestamps import utc_iso, utc_now
 
 
 @dataclass
@@ -65,7 +36,7 @@ class GatewayAuthManager:
         self._load_state_if_exists()
 
         if desktop_public_key_b64:
-            self._desktop_public_key = _load_public_key_b64(desktop_public_key_b64)
+            self._desktop_public_key = load_public_key_b64(desktop_public_key_b64)
             self._save_state()
 
     def is_claimed(self) -> bool:
@@ -74,8 +45,7 @@ class GatewayAuthManager:
     def desktop_public_key_b64(self) -> str | None:
         if self._desktop_public_key is None:
             return None
-        raw = self._desktop_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
-        return _b64_encode(raw)
+        return public_key_to_b64(self._desktop_public_key)
 
     def verify_desktop_claim(
         self,
@@ -85,19 +55,15 @@ class GatewayAuthManager:
         nonce_signature_b64: str,
     ) -> AuthResult:
         try:
-            key = _load_public_key_b64(public_key_b64)
-            key.verify(_b64_decode(nonce_signature_b64), bytes.fromhex(nonce_hex))
+            key = load_public_key_b64(public_key_b64)
+            if not verify_signature(key, bytes.fromhex(nonce_hex), nonce_signature_b64):
+                return AuthResult(ok=False, reason="desktop claim signature invalid")
         except Exception:
             return AuthResult(ok=False, reason="desktop claim signature invalid")
 
         if self._desktop_public_key is not None:
             # Idempotent claim from the same desktop key is accepted.
-            current = self._desktop_public_key.public_bytes(
-                encoding=Encoding.Raw,
-                format=PublicFormat.Raw,
-            )
-            incoming = key.public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
-            if current != incoming:
+            if public_key_to_b64(self._desktop_public_key) != public_key_to_b64(key):
                 return AuthResult(ok=False, reason="gateway already claimed by another desktop")
             return AuthResult(ok=True)
 
@@ -109,11 +75,9 @@ class GatewayAuthManager:
         key = self._desktop_public_key
         if key is None:
             return AuthResult(ok=False, reason="gateway not claimed by desktop yet")
-        try:
-            key.verify(_b64_decode(nonce_signature_b64), bytes.fromhex(nonce_hex))
-            return AuthResult(ok=True)
-        except Exception:
+        if not verify_signature(key, bytes.fromhex(nonce_hex), nonce_signature_b64):
             return AuthResult(ok=False, reason="desktop signature invalid")
+        return AuthResult(ok=True)
 
     def verify_device_auth(
         self,
@@ -128,43 +92,25 @@ class GatewayAuthManager:
             return AuthResult(ok=False, reason="gateway not claimed by desktop yet")
 
         try:
-            root_key.verify(
-                _b64_decode(desktop_signature_b64),
-                attestation_blob.encode("utf-8"),
+            attestation = verify_device_attestation(
+                root_key,
+                attestation_blob=attestation_blob,
+                desktop_signature_b64=desktop_signature_b64,
             )
-        except Exception:
-            return AuthResult(ok=False, reason="attestation signature invalid")
+        except ValueError as exc:
+            return AuthResult(ok=False, reason=str(exc))
 
-        try:
-            blob: dict[str, Any] = json.loads(attestation_blob)
-        except Exception:
-            return AuthResult(ok=False, reason="attestation blob is not valid JSON")
-
-        device_id = blob.get("device_id")
-        device_public_key_b64 = blob.get("device_public_key")
-        expires_at = blob.get("expires_at")
-
-        if not isinstance(device_id, str) or not device_id:
-            return AuthResult(ok=False, reason="attestation missing device_id")
-        if not isinstance(device_public_key_b64, str) or not device_public_key_b64:
-            return AuthResult(ok=False, reason="attestation missing device_public_key")
-        if not isinstance(expires_at, str) or not expires_at:
-            return AuthResult(ok=False, reason="attestation missing expires_at")
-
-        try:
-            expiry = _parse_iso8601_utc(expires_at)
-        except Exception:
-            return AuthResult(ok=False, reason="attestation expires_at invalid")
-        if expiry <= datetime.now(UTC):
+        if attestation.expires_at <= utc_now():
             return AuthResult(ok=False, reason="attestation expired")
 
         try:
-            device_key = _load_public_key_b64(device_public_key_b64)
-            device_key.verify(_b64_decode(nonce_signature_b64), bytes.fromhex(nonce_hex))
+            device_key = load_public_key_b64(attestation.device_public_key_b64)
+            if not verify_signature(device_key, bytes.fromhex(nonce_hex), nonce_signature_b64):
+                return AuthResult(ok=False, reason="device nonce signature invalid")
         except Exception:
             return AuthResult(ok=False, reason="device nonce signature invalid")
 
-        return AuthResult(ok=True, device_id=device_id)
+        return AuthResult(ok=True, device_id=attestation.device_id)
 
     def _load_state_if_exists(self) -> None:
         if not self._state_file.exists():
@@ -173,7 +119,7 @@ class GatewayAuthManager:
             payload = json.loads(self._state_file.read_text(encoding="utf-8"))
             public_key_b64 = payload.get("desktop_public_key")
             if isinstance(public_key_b64, str) and public_key_b64:
-                self._desktop_public_key = _load_public_key_b64(public_key_b64)
+                self._desktop_public_key = load_public_key_b64(public_key_b64)
         except Exception:
             # Corrupt state should not crash startup; gateway can be re-claimed.
             self._desktop_public_key = None
@@ -181,7 +127,7 @@ class GatewayAuthManager:
     def _save_state(self) -> None:
         payload = {
             "desktop_public_key": self.desktop_public_key_b64(),
-            "claimed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "claimed_at": utc_iso(utc_now()),
         }
         self._state_file.write_text(
             json.dumps(payload, indent=2, sort_keys=True),

@@ -20,7 +20,7 @@
         "type": "debugpy",
         "request": "launch",
         "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
-        "module": "phbcli.cli",
+        "program": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\phbcli.exe",
         "args": ["start", "--foreground"],
         "cwd": "${workspaceFolder}\\phbserver",
         "env": {

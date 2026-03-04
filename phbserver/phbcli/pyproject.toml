@@ -31,15 +31,15 @@ dependencies = [
     "langgraph>=1.0",
     "langchain-openai>=0.3",
     "phb-channel-sdk",
-    "phb-logger",
+    "phb-commons",
 ]
 
 [project.scripts]
-phbcli = "phbcli.cli:app"
+phbcli = "phbcli.commands.app:app"
 
 [tool.uv.sources]
 phb-channel-sdk = { workspace = true }
-phb-logger = { workspace = true }
+phb-commons = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phbcli"]

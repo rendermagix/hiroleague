@@ -26,9 +26,10 @@ from typing import Dict
 
 import websockets
 from websockets.asyncio.server import ServerConnection
-from phb_logger import Logger
+from phb_commons.nonces import generate_nonce
+from phb_commons.log import Logger
 
-from .auth import GatewayAuthManager, generate_nonce
+from .auth import GatewayAuthManager
 
 log = Logger.get("RELAY")
 

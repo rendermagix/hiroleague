@@ -8,19 +8,15 @@ Owns the gateway WebSocket connection and translates between:
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 from pathlib import Path
 
 import websockets
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    PublicFormat,
-    load_pem_private_key,
-)
+from phb_commons.keys import load_private_key_pem, public_key_to_b64
+from phb_commons.signing import sign_nonce
 from websockets.exceptions import ConnectionClosed
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from phb_channel_sdk import ChannelInfo, ChannelPlugin, UnifiedMessage
 
@@ -33,26 +29,6 @@ AUTH_TIMEOUT_SECONDS = 15.0
 
 def _default_master_key_path() -> Path:
     return Path.home() / ".phbcli" / "master_key.pem"
-
-
-def _load_master_private_key(path: Path) -> Ed25519PrivateKey:
-    key = load_pem_private_key(path.read_bytes(), password=None)
-    if not isinstance(key, Ed25519PrivateKey):
-        raise TypeError("master key must be Ed25519")
-    return key
-
-
-def _public_key_b64(private_key: Ed25519PrivateKey) -> str:
-    raw = private_key.public_key().public_bytes(
-        encoding=Encoding.Raw,
-        format=PublicFormat.Raw,
-    )
-    return base64.b64encode(raw).decode("ascii")
-
-
-def _sign_nonce_b64(private_key: Ed25519PrivateKey, nonce_hex: str) -> str:
-    signature = private_key.sign(bytes.fromhex(nonce_hex))
-    return base64.b64encode(signature).decode("ascii")
 
 
 class DevicesChannel(ChannelPlugin):
@@ -94,7 +70,7 @@ class DevicesChannel(ChannelPlugin):
             raise RuntimeError(
                 f"devices channel requires master key file: {self._master_key_path}"
             )
-        self._master_private_key = _load_master_private_key(self._master_key_path)
+        self._master_private_key = load_private_key_pem(self._master_key_path.read_bytes())
         if self._runner_task is None:
             self._runner_task = asyncio.create_task(self._run_gateway_loop())
 
@@ -197,8 +173,8 @@ class DevicesChannel(ChannelPlugin):
             "type": "auth_response",
             "auth_mode": "desktop_claim",
             "device_id": self._device_id,
-            "public_key": _public_key_b64(key),
-            "nonce_signature": _sign_nonce_b64(key, nonce),
+            "public_key": public_key_to_b64(key.public_key()),
+            "nonce_signature": sign_nonce(key, nonce),
         }
         await ws.send(json.dumps(auth_response))
 

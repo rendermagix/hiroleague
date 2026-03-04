@@ -1,15 +1,10 @@
-"""Shared logging initialiser for all PHB components.
-
-Thin shim over ``phb_logger.Logger``.  Call ``init()`` once at process start,
-before any other logging calls.  The signature is preserved so all existing
-call sites work without changes.
-"""
+"""Shared logging initialiser for all PHB components."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 _BACKUP_COUNT = 5

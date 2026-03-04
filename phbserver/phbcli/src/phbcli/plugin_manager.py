@@ -22,7 +22,7 @@ from typing import Any
 import websockets
 from websockets.asyncio.server import ServerConnection
 from websockets.exceptions import ConnectionClosed
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from .channel_config import ChannelConfig, list_enabled_channels
 from .config import Config, resolve_log_dir

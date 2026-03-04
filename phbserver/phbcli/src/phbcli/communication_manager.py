@@ -14,7 +14,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from phb_channel_sdk.models import UnifiedMessage
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 if TYPE_CHECKING:
     from .plugin_manager import PluginManager

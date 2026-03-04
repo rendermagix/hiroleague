@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from phb_channel_sdk.models import UnifiedMessage
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from .agent_config import load_agent_config, load_system_prompt
 

@@ -18,7 +18,7 @@ from pathlib import Path
 import typer
 import websockets
 from phb_channel_sdk import log_setup
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 from .auth import GatewayAuthManager
 from .relay import configure_auth, get_connected_devices, handle_connection

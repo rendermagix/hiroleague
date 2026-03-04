@@ -11,7 +11,7 @@ from typing import Any
 
 from phb_channel_sdk.base import ChannelPlugin
 from phb_channel_sdk.models import ChannelInfo, UnifiedMessage
-from phb_logger import Logger
+from phb_commons.log import Logger
 
 log = Logger.get("ECHO")
 
