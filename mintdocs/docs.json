@@ -9,15 +9,23 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "dropdowns": [
+    "tabs": [
       {
-        "dropdown": "Server CLI",
+        "tab": "Private Home Box",
+        "groups": [
+          {
+            "group": "CLI",
+            "pages": [
+              "server-ops",
+              "workspace"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Architecture",
         "pages": [
-          "untitled-page",
-          "devices",
-          "channels",
-          "operation",
-          "workspace"
+          "general"
         ]
       }
     ]
