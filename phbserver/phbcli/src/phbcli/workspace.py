@@ -6,7 +6,7 @@ Registry location (per platform):
   Linux:    ~/.local/share/phbcli/registry.json
 
 Each workspace is a self-contained directory holding config, keys, channels,
-logs, PID files, and optionally a local gateway state file.
+logs, and PID files.
 
 Port allocation — 3 ports per slot, starting at port_range_start (default 18080):
   http_port    = port_range_start + slot * 3
@@ -36,7 +36,6 @@ class WorkspaceEntry(BaseModel):
     name: str
     path: str
     port_slot: int
-    local_gateway: bool = False
 
 
 class WorkspaceRegistry(BaseModel):
@@ -140,7 +139,6 @@ def create_workspace(
     name: str,
     *,
     path: Path | None = None,
-    local_gateway: bool = False,
 ) -> tuple[WorkspaceEntry, WorkspaceRegistry]:
     """Create a new workspace and add it to the registry.
 
@@ -160,7 +158,6 @@ def create_workspace(
         name=name,
         path=str(workspace_path),
         port_slot=slot,
-        local_gateway=local_gateway,
     )
     registry.workspaces[name] = entry
 

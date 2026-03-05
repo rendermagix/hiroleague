@@ -16,9 +16,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from phb_commons.log import Logger
+from phb_commons.process import is_running, read_pid
 
 from .config import Config, load_state
-from .process import is_running, read_pid
 
 log = Logger.get("HTTP")
 
@@ -43,7 +43,7 @@ def set_channel_info_provider(fn: Callable[[], list[dict[str, str]]]) -> None:
 async def get_status() -> JSONResponse:
     assert _workspace_path is not None, "workspace_path not initialised"
     state = load_state(_workspace_path)
-    pid = read_pid(_workspace_path)
+    pid = read_pid(_workspace_path, "phbcli.pid")
     return JSONResponse(
         {
             "running": is_running(pid),

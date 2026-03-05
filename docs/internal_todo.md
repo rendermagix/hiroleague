@@ -10,6 +10,8 @@
   - Put all config files in one organized place (workspace)
   - Better/Colorful Logging Format
   - Log what really matters
+- Docs
+  - check cursor history at work, for using ENV to set workspace, and use that to update mintdocs.
 
 # Add Features
 - Add xLogger Custom Logging module for better terminal tracking.

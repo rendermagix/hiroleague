@@ -1,0 +1,125 @@
+---
+title: "CLI storage and file formats"
+description: "Default storage locations, workspace folder layout, and JSON formats used by phbcli."
+icon: "database"
+---
+
+`phbcli` stores workspace metadata in a global registry, then keeps runtime and identity files inside each workspace folder.
+
+## Default storage locations
+
+Registry base directory is the platform app data directory for `phbcli`.
+
+- Windows: `%LOCALAPPDATA%\\phbcli`
+- macOS: `~/Library/Application Support/phbcli`
+- Linux: `~/.local/share/phbcli`
+
+Registry file:
+
+- `<app_data>/phbcli/registry.json`
+
+Default workspace root:
+
+- `<app_data>/phbcli/workspaces/<workspace_name>/`
+
+## Folder structure
+
+```text
+<app_data>/phbcli/
+  registry.json
+  workspaces/
+    <workspace_name>/
+      config.json
+      state.json
+      master_key.pem
+      phbcli.pid
+      devices.json
+      pairing_session.json
+      channels/
+      logs/
+      agent/
+```
+
+## `registry.json` format
+
+`registry.json` tracks all workspaces and their slot-based port assignment.
+
+```json
+{
+  "default_workspace": "home",
+  "port_range_start": 18080,
+  "workspaces": {
+    "home": {
+      "name": "home",
+      "path": "C:/Users/<user>/AppData/Local/phbcli/workspaces/home",
+      "port_slot": 0
+    }
+  }
+}
+```
+
+### Port derivation
+
+For a workspace with slot `s`:
+
+- `http_port = port_range_start + s * 3`
+- `plugin_port = port_range_start + s * 3 + 1`
+- `gateway_port = port_range_start + s * 3 + 2`
+
+Example with default start `18080`:
+
+- slot `0` -> `18080`, `18081`, `18082`
+- slot `1` -> `18083`, `18084`, `18085`
+
+## `config.json` format
+
+`config.json` stores workspace-level server and identity configuration.
+
+```json
+{
+  "device_id": "8d0f79cb-91b6-4b57-a694-4d196f2e89e4",
+  "gateway_url": "ws://localhost:8765",
+  "http_host": "127.0.0.1",
+  "http_port": 18080,
+  "plugin_port": 18081,
+  "master_key_file": "master_key.pem",
+  "pairing_code_length": 6,
+  "pairing_code_ttl_seconds": 300,
+  "attestation_expires_days": 30,
+  "log_dir": "",
+  "log_levels": {}
+}
+```
+
+### Notes
+
+- `log_dir: ""` means default workspace logs directory (`<workspace>/logs`).
+- `master_key_file` is resolved relative to the workspace folder.
+
+## `state.json` format
+
+`state.json` stores runtime connectivity metadata.
+
+```json
+{
+  "ws_connected": false,
+  "last_connected": null,
+  "gateway_url": null
+}
+```
+
+`last_connected` is ISO 8601 UTC when present.
+
+## `phbcli.pid`
+
+`phbcli.pid` stores the active background process ID for the workspace.
+
+- created on background `phbcli start`
+- removed on successful `phbcli stop`
+- cleaned when stale PID is detected
+
+## Scope boundary with gateway files
+
+Gateway instance files are managed by `phbgateway`, not by `phbcli`.
+
+- Gateway docs: `/gateway-storage`

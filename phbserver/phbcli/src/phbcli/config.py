@@ -14,8 +14,7 @@ Workspace layout:
     pairing_session.json
     devices.json
     phbcli.pid
-    gateway.pid        (optional, when local gateway is managed)
-    gateway_state.json (optional, when local gateway is managed)
+    gateway instances are managed separately by phbgateway
 """
 
 from __future__ import annotations

@@ -59,23 +59,28 @@ def configure_auth(auth_manager: GatewayAuthManager) -> None:
     _auth_manager = auth_manager
 
 
-async def register(device_id: str, ws: ServerConnection) -> None:
+async def register(device_id: str, ws: ServerConnection) -> bool:
     async with _registry_lock:
         if device_id in _registry:
-            log.warning("Device reconnected, replacing old connection", device_id=device_id)
             old_ws = _registry[device_id]
+            if old_ws is ws:
+                return True
+            log.warning("Duplicate device connection rejected", device_id=device_id)
             try:
-                await old_ws.close(code=4000, reason="replaced by new connection")
+                await ws.close(code=4009, reason="device already connected")
             except Exception:
                 pass
+            return False
         _registry[device_id] = ws
         log.info("Device registered", device_id=device_id, total=len(_registry))
+        return True
 
 
-async def unregister(device_id: str) -> None:
+async def unregister(device_id: str, ws: ServerConnection) -> None:
     async with _registry_lock:
-        _registry.pop(device_id, None)
-        log.info("Device unregistered", device_id=device_id, total=len(_registry))
+        if _registry.get(device_id) is ws:
+            _registry.pop(device_id, None)
+            log.info("Device unregistered", device_id=device_id, total=len(_registry))
 
 
 async def relay_message(sender_id: str, raw: str) -> None:
@@ -132,28 +137,6 @@ async def _authenticate_connection(
     mode = msg.get("auth_mode")
     if not isinstance(mode, str):
         return False, None, "auth_mode is required", None
-
-    if mode == "desktop_claim":
-        device_id = msg.get("device_id")
-        public_key = msg.get("public_key")
-        signature = msg.get("nonce_signature") or msg.get("signature")
-        if not isinstance(device_id, str) or not device_id:
-            return False, None, "desktop_claim requires device_id", None
-        if not isinstance(public_key, str) or not public_key:
-            return False, None, "desktop_claim requires public_key", None
-        if not isinstance(signature, str) or not signature:
-            return False, None, "desktop_claim requires nonce_signature", None
-        result = auth.verify_desktop_claim(
-            nonce_hex=nonce,
-            public_key_b64=public_key,
-            nonce_signature_b64=signature,
-        )
-        return (
-            result.ok,
-            device_id if result.ok else None,
-            result.reason or "auth failed",
-            "desktop",
-        )
 
     if mode == "desktop":
         device_id = msg.get("device_id")
@@ -330,10 +313,10 @@ async def handle_connection(ws: ServerConnection) -> None:
     log.info("Device authenticated", device_id=device_id, role=role)
 
     is_desktop = role == "desktop"
+    if not await register(device_id, ws):
+        return
     if is_desktop:
         await _register_desktop_ws(ws)
-
-    await register(device_id, ws)
     try:
         async for message in ws:
             if is_desktop:
@@ -350,7 +333,7 @@ async def handle_connection(ws: ServerConnection) -> None:
     finally:
         if is_desktop:
             await _unregister_desktop_ws(ws)
-        await unregister(device_id)
+        await unregister(device_id, ws)
 
 
 def get_connected_devices() -> list[str]:

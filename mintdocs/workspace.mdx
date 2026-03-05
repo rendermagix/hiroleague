@@ -8,6 +8,8 @@ A workspace is an isolated desktop-server instance with its own config, keys, st
 
 Use workspace commands to create, inspect, and remove these instances.
 
+For on-disk paths and JSON file formats, see `/cli-storage`.
+
 ## List workspaces
 
 ```bash
@@ -18,7 +20,7 @@ Shows all configured workspaces, their status, ports, and paths.
 
 - `*` marks the default workspace.
 - `Status` shows whether the workspace server is running.
-- `Gateway` shows either a managed local gateway port or `external`.
+- `Gateway` is always external and configured via workspace `gateway_url`.
 
 ## Create a workspace
 
@@ -37,15 +39,11 @@ phbcli workspace create dev
 | Option | Description |
 |--------|-------------|
 | `--path`, `-p` | Create the workspace at a custom folder path. |
-| `--with-gateway` | Enable managed local gateway lifecycle for this workspace. |
 | `--set-default` | Set this workspace as the default immediately. |
 
 ### Examples
 
 ```bash
-# Create with a local managed gateway
-phbcli workspace create home --with-gateway
-
 # Create in a custom folder
 phbcli workspace create work -p "D:\\PHB\\work"
 
@@ -69,7 +67,7 @@ Displays detailed status and configuration for one workspace:
 - Whether it is default
 - Server running state and PID
 - HTTP, plugin, and gateway ports
-- Local gateway running state (if managed)
+- Gateway mode (`external`)
 - Port slot number
 
 If `name` is omitted, the command shows the default workspace.
@@ -118,7 +116,7 @@ phbcli workspace remove dev --purge
 ## Workflow example
 
 ```bash
-phbcli workspace create home --with-gateway --set-default
+phbcli workspace create home --set-default
 phbcli setup --workspace home
 phbcli start --workspace home
 phbcli workspace show home

@@ -24,6 +24,13 @@ import websockets
 from websockets.asyncio.server import ServerConnection
 from websockets.exceptions import ConnectionClosed
 from phb_commons.log import Logger
+from phb_commons.process import (
+    is_running,
+    kill_process,
+    read_channel_pid,
+    remove_channel_pid,
+    write_channel_pid,
+)
 
 from .channel_config import ChannelConfig, list_enabled_channels, load_channel_config
 from .config import Config, resolve_log_dir
@@ -98,6 +105,7 @@ class PluginManager:
             "--phb-ws", phb_ws,
             "--log-dir", str(log_dir),
         ]
+        self._kill_previous_channel(ch.name)
         log.info("Spawning channel plugin", channel=ch.name, cmd=cmd)
         try:
             if sys.platform == "win32":
@@ -120,6 +128,7 @@ class PluginManager:
                     stderr=subprocess.DEVNULL,
                 )
             self._subprocesses.append(proc)
+            write_channel_pid(self._workspace_path, ch.name, proc.pid)
         except FileNotFoundError:
             log.error(
                 "Channel command not found",
@@ -128,6 +137,15 @@ class PluginManager:
             )
         except Exception as exc:
             log.error("Failed to spawn channel plugin", channel=ch.name, error=str(exc))
+
+    def _kill_previous_channel(self, channel_name: str) -> None:
+        pid = read_channel_pid(self._workspace_path, channel_name)
+        if pid is None:
+            return
+        if is_running(pid):
+            log.info("Stopping previous channel plugin", channel=channel_name, pid=pid)
+            kill_process(pid)
+        remove_channel_pid(self._workspace_path, channel_name)
 
     async def _shutdown_channels(self) -> None:
         for ch in list(self._channels.values()):
@@ -143,6 +161,10 @@ class PluginManager:
                     proc.terminate()
                 except Exception:
                     pass
+
+        channels = list_enabled_channels(self._workspace_path)
+        for ch in channels:
+            remove_channel_pid(self._workspace_path, ch.name)
 
     # ------------------------------------------------------------------
     # WebSocket connection handler
@@ -169,6 +191,20 @@ class PluginManager:
                 match method:
                     case "channel.register":
                         channel_name = params["name"]
+                        prev = self._channels.get(channel_name)
+                        if prev is not None and prev.ws is not ws:
+                            log.warning(
+                                "Duplicate channel registration detected, replacing previous",
+                                channel=channel_name,
+                            )
+                            try:
+                                await prev.ws.send(rpc.build_notification("channel.stop", {}))
+                            except Exception:
+                                pass
+                            try:
+                                await prev.ws.close(code=4010, reason="replaced by newer registration")
+                            except Exception:
+                                pass
                         self._channels[channel_name] = _ConnectedChannel(
                             name=channel_name,
                             version=params.get("version", "?"),
@@ -239,8 +275,9 @@ class PluginManager:
             )
         finally:
             if channel_name and channel_name in self._channels:
-                del self._channels[channel_name]
-                log.info("Channel disconnected", channel=channel_name)
+                if self._channels[channel_name].ws is ws:
+                    del self._channels[channel_name]
+                    log.info("Channel disconnected", channel=channel_name)
 
     async def _handle_response(
         self, channel_name: str | None, data: dict[str, Any]

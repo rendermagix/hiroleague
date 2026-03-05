@@ -10,10 +10,10 @@ from rich.console import Console
 from rich.table import Table
 
 from phb_commons.keys import public_key_to_b64
+from phb_commons.process import is_running, read_pid
 
 from ..config import Config, load_config, load_state, master_key_path, save_config
 from ..crypto import load_or_create_master_key
-from ..process import is_running, read_pid, remove_pid, stop_server
 from ..services.autostart_feedback import (
     register_autostart_with_feedback,
     unregister_autostart_with_feedback,
@@ -24,7 +24,6 @@ from ..workspace import (
     WorkspaceError,
     WorkspaceRegistry,
     create_workspace,
-    gateway_port_for,
     http_port_for,
     load_registry,
     plugin_port_for,
@@ -102,9 +101,6 @@ def register(app: typer.Typer, console: Console) -> None:
         effective_gateway_url = gateway_url
         if effective_gateway_url is None:
             default_gw = existing.gateway_url
-            if entry.local_gateway:
-                gw_port = gateway_port_for(registry, entry.port_slot)
-                default_gw = f"ws://localhost:{gw_port}"
             effective_gateway_url = typer.prompt(
                 "Gateway WebSocket URL",
                 default=default_gw,
@@ -286,7 +282,7 @@ def _print_workspace_status(
 ) -> None:
     entry = registry.workspaces[name]
     workspace_path = Path(entry.path)
-    pid = read_pid(workspace_path)
+    pid = read_pid(workspace_path, "phbcli.pid")
     running = is_running(pid)
     state = load_state(workspace_path)
     config = load_config(workspace_path)
@@ -312,16 +308,5 @@ def _print_workspace_status(
         "HTTP API",
         f"http://{config.http_host}:{config.http_port}/status" if running else "—",
     )
-
-    if entry.local_gateway:
-        from ..process import read_gateway_pid
-        gw_pid = read_gateway_pid(workspace_path)
-        gw_running = is_running(gw_pid)
-        gw_port = gateway_port_for(registry, entry.port_slot)
-        table.add_row(
-            "Local gateway",
-            f"[green]running[/green] (PID {gw_pid}) — ws://localhost:{gw_port}"
-            if gw_running else "[red]stopped[/red]",
-        )
 
     console.print(table)

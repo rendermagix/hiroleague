@@ -1,7 +1,7 @@
 """Workspace management subcommands.
 
 phbcli workspace list
-phbcli workspace create <name> [--path P] [--with-gateway] [--set-default]
+phbcli workspace create <name> [--path P] [--set-default]
 phbcli workspace remove <name> [--purge] [--yes]
 phbcli workspace set-default <name>
 phbcli workspace show [<name>]
@@ -12,10 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from phb_commons.process import is_running, read_pid
 from rich.console import Console
 from rich.table import Table
 
-from ..process import is_running, read_gateway_pid, read_pid
 from ..workspace import (
     WorkspaceError,
     create_workspace,
@@ -48,29 +48,17 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         table.add_column("Name", style="bold")
         table.add_column("Status")
         table.add_column("HTTP")
-        table.add_column("Gateway")
         table.add_column("Path")
 
         for name, entry in registry.workspaces.items():
             workspace_path = Path(entry.path)
-            pid = read_pid(workspace_path)
+            pid = read_pid(workspace_path, "phbcli.pid")
             running = is_running(pid)
-
-            gw_port = gateway_port_for(registry, entry.port_slot)
-            gw_pid = read_gateway_pid(workspace_path) if entry.local_gateway else None
-            gw_running = is_running(gw_pid)
 
             default_marker = "[cyan]*[/cyan]" if name == registry.default_workspace else ""
             status = "[green]running[/green]" if running else "[dim]stopped[/dim]"
             http_str = f":{http_port_for(registry, entry.port_slot)}"
-
-            if entry.local_gateway:
-                gw_status = "[green]up[/green]" if gw_running else "[dim]down[/dim]"
-                gw_str = f":{gw_port} ({gw_status})"
-            else:
-                gw_str = "[dim]external[/dim]"
-
-            table.add_row(default_marker, name, status, http_str, gw_str, entry.path)
+            table.add_row(default_marker, name, status, http_str, entry.path)
 
         console.print(table)
         console.print("\n[cyan]*[/cyan] = default workspace")
@@ -82,10 +70,6 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
             None, "--path", "-p",
             help="Custom folder path. Defaults to the platform data dir.",
         ),
-        with_gateway: bool = typer.Option(
-            False, "--with-gateway",
-            help="Manage a local phbgateway process for this workspace.",
-        ),
         make_default: bool = typer.Option(
             False, "--set-default",
             help="Set this workspace as the default after creation.",
@@ -95,7 +79,7 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         custom_path = Path(path) if path else None
         try:
             entry, registry = create_workspace(
-                name, path=custom_path, local_gateway=with_gateway
+                name, path=custom_path
             )
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
@@ -113,8 +97,7 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         console.print(f"  path         : [bold]{entry.path}[/bold]")
         console.print(f"  http_port    : [bold]{http}[/bold]")
         console.print(f"  plugin_port  : [bold]{plugin}[/bold]")
-        gw_note = "(local — managed by phbcli)" if with_gateway else "(external)"
-        console.print(f"  gateway_port : [bold]{gw}[/bold]  {gw_note}")
+        console.print(f"  gateway_port : [bold]{gw}[/bold]  (external)")
 
         if name == registry.default_workspace:
             console.print("  [cyan]Set as default workspace.[/cyan]")
@@ -175,10 +158,8 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
             raise typer.Exit(1)
 
         workspace_path = Path(entry.path)
-        pid = read_pid(workspace_path)
+        pid = read_pid(workspace_path, "phbcli.pid")
         running = is_running(pid)
-        gw_pid = read_gateway_pid(workspace_path) if entry.local_gateway else None
-        gw_running = is_running(gw_pid)
 
         http = http_port_for(registry, entry.port_slot)
         plugin = plugin_port_for(registry, entry.port_slot)
@@ -205,13 +186,7 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         table.add_row("HTTP port", str(http))
         table.add_row("Plugin port", str(plugin))
         table.add_row("Gateway port", str(gw))
-        if entry.local_gateway:
-            table.add_row(
-                "Local gateway",
-                f"[green]running[/green] (PID {gw_pid})" if gw_running else "[dim]stopped[/dim]",
-            )
-        else:
-            table.add_row("Local gateway", "[dim]external (not managed)[/dim]")
+        table.add_row("Gateway", "[dim]external (not managed by phbcli)[/dim]")
         table.add_row("Port slot", str(entry.port_slot))
 
         console.print(table)

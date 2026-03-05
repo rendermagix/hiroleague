@@ -1,0 +1,42 @@
+---
+title: "Gateway CLI commands"
+description: "Gateway command overview and setup flow."
+icon: "radio-tower"
+---
+
+Use `phbgateway` to run one or more named gateway instances.
+
+## Quick start
+
+<Steps>
+  <Step title="Create an instance">
+    Create a named instance with mandatory values.
+
+```bash
+phbgateway instance create home --host 0.0.0.0 --port 8765 --desktop-pubkey "<base64-public-key>" --set-default
+```
+  </Step>
+  <Step title="Start the instance">
+    Start by instance name, or omit `--instance` to use default.
+
+```bash
+phbgateway start --instance home
+# or start default instance:
+phbgateway start
+```
+  </Step>
+  <Step title="Point workspace server to gateway URL">
+    Configure your workspace server to use this gateway endpoint.
+
+```bash
+phbcli setup --workspace home --gateway-url ws://localhost:8765
+phbcli status --workspace home
+```
+  </Step>
+</Steps>
+
+## Command pages
+
+- Instance management: `/gateway-instances`
+- Runtime operations: `/gateway-runtime`
+- Storage and file formats: `/gateway-storage`

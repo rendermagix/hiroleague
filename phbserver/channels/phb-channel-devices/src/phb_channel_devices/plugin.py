@@ -13,7 +13,7 @@ from pathlib import Path
 
 import websockets
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from phb_commons.keys import load_private_key_pem, public_key_to_b64
+from phb_commons.keys import load_private_key_pem
 from phb_commons.signing import sign_nonce
 from websockets.exceptions import ConnectionClosed
 from phb_commons.log import Logger
@@ -171,9 +171,8 @@ class DevicesChannel(ChannelPlugin):
 
         auth_response = {
             "type": "auth_response",
-            "auth_mode": "desktop_claim",
+            "auth_mode": "desktop",
             "device_id": self._device_id,
-            "public_key": public_key_to_b64(key.public_key()),
             "nonce_signature": sign_nonce(key, nonce),
         }
         await ws.send(json.dumps(auth_response))

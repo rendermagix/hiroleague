@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from phb_commons.log import Logger
+from phb_commons.process import write_pid
 
 log = Logger.get("SERVER")
 
@@ -74,7 +75,6 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     from phbcli.agent_manager import AgentManager
     from phbcli.communication_manager import CommunicationManager
     from phbcli.plugin_manager import PluginManager
-    from phbcli.process import write_pid
     from phbcli.server import run_http_server, set_channel_info_provider, set_workspace_path
 
     config = load_config(workspace_path)
@@ -87,7 +87,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     )
     desktop_private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
     stop_event = asyncio.Event()
-    write_pid(workspace_path)
+    write_pid(workspace_path, "phbcli.pid")
     set_workspace_path(workspace_path)
     plugin_manager: PluginManager | None = None
 

@@ -19,8 +19,18 @@
               "setup-and-uninstall",
               "server-ops",
               "workspace",
+              "cli-storage",
               "devices",
               "channel"
+            ]
+          },
+          {
+            "group": "Gateway",
+            "pages": [
+              "gateway-cli",
+              "gateway-instances",
+              "gateway-runtime",
+              "gateway-storage"
             ]
           }
         ]

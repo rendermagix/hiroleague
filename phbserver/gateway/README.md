@@ -9,18 +9,38 @@ devices identified by `device_id`.
 ## Quick Start
 
 ```bash
-# Install and run with uv
-uv run phbgateway
+# Create a named gateway instance (mandatory values at creation)
+uv run phbgateway instance create home --port 8765 --desktop-pubkey "<base64-public-key>" --set-default
 
-# Or with custom host/port and state dir
-uv run phbgateway --host 0.0.0.0 --port 8765 --state-dir ./.gateway-state
+# Start the instance later using only its name/default
+uv run phbgateway start --instance home
+# or simply:
+uv run phbgateway
+```
+
+## Instance model
+
+Each gateway runs as a named instance with persistent config:
+
+- `name` (instance identity)
+- `host` and `port` (bind address)
+- `desktop_public_key` trust root
+- `log_dir` (optional override)
+
+Instance commands:
+
+```bash
+phbgateway instance list
+phbgateway instance show home
+phbgateway instance set-default home
+phbgateway instance remove home --purge
 ```
 
 ## How it works
 
 1. Every new socket receives an auth challenge nonce.
-2. A desktop client authenticates using its master key (`auth_mode=desktop`) and can
-   claim an uninitialized gateway by sending its public key once (`auth_mode=desktop_claim`).
+2. A desktop client authenticates using its master key (`auth_mode=desktop`) against
+   the desktop trust root configured at startup (`--desktop-pubkey`).
 3. A device client authenticates with desktop attestation + nonce signature
    (`auth_mode=device`).
 4. Once authenticated, messages are relayed by `device_id`.
