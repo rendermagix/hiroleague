@@ -31,6 +31,7 @@ from phb_commons.log import Logger
 
 from phb_channel_sdk.constants import (
     AUTH_ROLE_DESKTOP,
+    AUTH_ROLE_DEVICE,
     WS_CLOSE_AUTH_FAILED,
     WS_CLOSE_DESKTOP_NOT_CONNECTED,
     WS_CLOSE_DUPLICATE_DEVICE,

@@ -52,6 +52,10 @@ https://chatgpt.com/share/69a855f4-f80c-800b-9cfa-b6567bbe9330
 
 # Projects to Watch for Inspiration
 
+Personal AI Infrastructure - looks very good!
+https://github.com/danielmiessler/Personal_AI_Infrastructure?tab=readme-ov-file
+
+
 https://clawclones.com/
 https://www.reddit.com/r/AI_Agents/comments/1raq9qy/50_openclaw_alternatives_for_business/
 

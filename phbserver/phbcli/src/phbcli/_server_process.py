@@ -77,7 +77,9 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     from phbcli.agent_manager import AgentManager
     from phbcli.communication_manager import CommunicationManager
     from phbcli.plugin_manager import PluginManager
-    from phbcli.server import run_http_server, set_channel_info_provider, set_workspace_path
+    from phbcli.server import run_http_server, set_channel_info_provider, set_tool_registry, set_workspace_path
+    from phbcli.tools import DeviceAddTool, DeviceListTool, DeviceRevokeTool
+    from phbcli.tools.registry import ToolRegistry
 
     config = load_config(workspace_path)
     log_dir = resolve_log_dir(workspace_path, config)
@@ -91,6 +93,13 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     stop_event = asyncio.Event()
     write_pid(workspace_path, PID_FILENAME)
     set_workspace_path(workspace_path)
+
+    tool_registry = ToolRegistry()
+    tool_registry.register(DeviceAddTool())
+    tool_registry.register(DeviceListTool())
+    tool_registry.register(DeviceRevokeTool())
+    set_tool_registry(tool_registry)
+
     plugin_manager: PluginManager | None = None
 
     def _shutdown(*_: object) -> None:

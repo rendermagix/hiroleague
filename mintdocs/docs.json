@@ -39,7 +39,8 @@
         "tab": "Architecture",
         "pages": [
           "general",
-          "constants"
+          "constants",
+          "tools-architecture"
         ]
       }
     ]

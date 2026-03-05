@@ -74,6 +74,9 @@ class AgentManager:
         from langchain.chat_models import init_chat_model
         from langgraph.checkpoint.memory import InMemorySaver
 
+        from .tools import DeviceAddTool, DeviceListTool, DeviceRevokeTool
+        from .tools.langchain_adapter import to_langchain_list
+
         config = load_agent_config(self._workspace_path)
         system_prompt = load_system_prompt(self._workspace_path)
 
@@ -90,9 +93,15 @@ class AgentManager:
             max_tokens=config.max_tokens,
         )
 
+        tools = to_langchain_list([
+            DeviceAddTool(),
+            DeviceListTool(),
+            DeviceRevokeTool(),
+        ])
+
         return create_agent(
             model=model,
-            tools=[],
+            tools=tools,
             system_prompt=system_prompt,
             checkpointer=InMemorySaver(),
         )

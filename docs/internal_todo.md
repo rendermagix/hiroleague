@@ -1,8 +1,9 @@
 
 # Daily Tasks
+- add versioning.
+- separate cli from functionality, and allow an api for the website.
 - Log what really matters
 - Move Docs to Mintdocs.
-- check cursor history at work, for using ENV to set workspace, and use that to update mintdocs.
 
 # Add Features
 
