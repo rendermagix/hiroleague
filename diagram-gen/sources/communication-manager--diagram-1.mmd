@@ -1,0 +1,15 @@
+graph LR
+    CP["Channel Plugin"]
+    CM["Channel Manager<br/>on_message callback"]
+    RCV["CommunicationManager<br/>.receive()"]
+    VAL["Validate →<br/>UnifiedMessage"]
+    PERM["Permission<br/>check"]
+    IQ[("Inbound<br/>Queue")]
+    AM["Agent Manager"]
+
+    CP --> CM
+    CM --> RCV
+    RCV --> VAL
+    VAL --> PERM
+    PERM --> IQ
+    IQ --> AM

@@ -151,6 +151,12 @@ def run(check_only: bool = False) -> None:
         render_image(mmd_path, png)
         print(f"  [rendered] {png.name}")
 
+    # Stage generated files so pre-commit's stash/restore cycle doesn't
+    # conflict with the newly written PNGs and .mmd sources.
+    generated = [str(p) for p in IMAGES_DIR.glob("*.png")] + [str(p) for p in SOURCES_DIR.glob("*.mmd")]
+    if generated:
+        subprocess.run(["git", "add", "--"] + generated, check=True)
+
     print("\nDone.")
 
 

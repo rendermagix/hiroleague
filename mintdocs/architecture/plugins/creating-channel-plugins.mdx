@@ -1,11 +1,12 @@
-# Channel Plugin Development Guide
+---
+title: "Creating channel plugins"
+description: "How to write, install, and configure a new PHB channel plugin."
+icon: "code"
+---
 
-This guide explains how to write, install, and configure a new PHB channel plugin.
-A plugin connects a third-party messaging platform (Telegram, WhatsApp, your mobile
-app, or anything else) to the Private Home Box server.
+This guide walks you through writing a new PHB channel plugin from scratch. A plugin connects a third-party messaging platform — Telegram, WhatsApp, your mobile app, or anything else — to the Private Home Box server.
 
-For the architectural background — subprocess model, JSON-RPC protocol, message flow
-diagrams — see [channel-plugin-architecture.md](channel-plugin-architecture.md).
+For the architectural background — subprocess model, JSON-RPC protocol, and message flow — see [Channel plugin architecture](/architecture/plugins/channel-plugin-architecture).
 
 ---
 
@@ -72,8 +73,9 @@ packages = ["src/phb_channel_telegram"]
 phb-channel-sdk = { workspace = true }
 ```
 
-> **`[tool.uv.sources]`** is required for uv to resolve `phb-channel-sdk`
-> from the local workspace instead of PyPI.
+<Note>
+`[tool.uv.sources]` is required for uv to resolve `phb-channel-sdk` from the local workspace instead of PyPI.
+</Note>
 
 ---
 
@@ -133,7 +135,7 @@ class TelegramChannel(ChannelPlugin):
                     "username": msg.from_user.username,
                 },
             )
-            await self.emit(unified)  # ← forwards to phbcli
+            await self.emit(unified)  # forwards to phbcli
 
         self._app.add_handler(MessageHandler(filters.TEXT, _handle))
         asyncio.create_task(self._app.run_polling())
@@ -166,9 +168,7 @@ class TelegramChannel(ChannelPlugin):
 
 ### The `emit` method
 
-`await self.emit(unified_message)` is inherited — call it whenever an inbound
-message arrives from the third party. The transport layer forwards it to phbcli
-as a `channel.receive` JSON-RPC notification automatically.
+`await self.emit(unified_message)` is inherited — call it whenever an inbound message arrives from the third party. The transport layer forwards it to phbcli as a `channel.receive` JSON-RPC notification automatically.
 
 ---
 
@@ -211,36 +211,35 @@ if __name__ == "__main__":
     app()
 ```
 
-The `--phb-ws` argument is automatically appended by `PluginManager` when
-spawning the subprocess. The `envvar="PHB_WS"` allows overriding it in
-development without CLI args.
+The `--phb-ws` argument is automatically appended by `ChannelManager` when spawning the subprocess. The `envvar="PHB_WS"` allows overriding it in development without CLI args.
 
 ---
 
 ## 5. Install and configure
 
-### Option A — development (workspace member)
+<Tabs>
+  <Tab title="Development (workspace member)">
+    Add the channel to the uv workspace and install it in-place:
 
-Add the channel to the uv workspace and install it in-place:
+    ```bash
+    # The workspace root already has channels/* as a member, so just sync:
+    cd phbserver
+    uv sync
 
-```bash
-# The workspace root already has channels/* as a member, so just sync:
-cd phbserver
-uv sync
+    # Register with phbcli:
+    phbcli channel setup telegram
+    # Prompts: "Command to start the 'telegram' plugin" → phb-channel-telegram
+    ```
+  </Tab>
+  <Tab title="Published package">
+    ```bash
+    phbcli channel install telegram
+    # Runs: uv tool install phb-channel-telegram
 
-# Register with phbcli:
-phbcli channel setup telegram
-# Prompts: "Command to start the 'telegram' plugin" → phb-channel-telegram
-```
-
-### Option B — published package
-
-```bash
-phbcli channel install telegram
-# Runs: uv tool install phb-channel-telegram
-
-phbcli channel setup telegram
-```
+    phbcli channel setup telegram
+    ```
+  </Tab>
+</Tabs>
 
 ### Store credentials
 
@@ -257,15 +256,14 @@ Edit `~/.phbcli/channels/telegram.json` and add your credentials to the `config`
 }
 ```
 
-phbcli pushes this `config` dict to your plugin via `on_configure()` automatically
-each time the plugin connects.
+phbcli pushes this `config` dict to your plugin via `on_configure()` automatically each time the plugin connects.
 
 ---
 
 ## 6. Run and verify
 
 ```bash
-# Restart the server so PluginManager spawns your new channel:
+# Restart the server so ChannelManager spawns your new channel:
 phbcli stop
 phbcli start
 
@@ -283,24 +281,23 @@ Expected output:
 
 ---
 
-## 7. Sending events and metadata back to phbcli
+## 7. Sending events back to phbcli
 
-Beyond inbound messages you can emit structured events using `channel.event`.
-Call this from your plugin via the transport directly when you need to report
-delivery receipts, errors, or status changes:
+Beyond inbound messages you can emit structured events using `channel.event` for delivery receipts, errors, or status changes. Currently, log them via the standard logger:
 
 ```python
-# From inside your plugin — requires accessing self._emit_callback pattern.
-# For status/error events, log them; full event emission is roadmap.
 logger.warning("Delivery failed for message %s", message.id)
 ```
 
-Full `channel.event` support (arbitrary structured events passed upstream to
-phbcli handlers) is on the roadmap.
+<Note>
+Full `channel.event` support — arbitrary structured events passed upstream to phbcli handlers — is on the roadmap.
+</Note>
 
 ---
 
-## 8. Reference — `UnifiedMessage` fields
+## Reference
+
+### `UnifiedMessage` fields
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -314,9 +311,7 @@ phbcli handlers) is on the roadmap.
 | `metadata` | `dict` | default `{}` | Channel-specific extras — free-form |
 | `timestamp` | `datetime` | auto | UTC, auto-generated |
 
----
-
-## 9. CLI reference — `phbcli channel`
+### `phbcli channel` commands
 
 | Command | Description |
 |---|---|
@@ -330,18 +325,33 @@ phbcli handlers) is on the roadmap.
 
 ---
 
-## 10. Tips
+## Troubleshooting
 
-**Plugin not connecting?**
-- Check the subprocess is running: `phbcli status`
-- Check the plugin logs (stdout/stderr of the subprocess)
-- Verify the command in `~/.phbcli/channels/<name>.json` is on `PATH`
-- Try running the plugin manually: `phb-channel-telegram --phb-ws ws://127.0.0.1:18081`
+<AccordionGroup>
+  <Accordion title="Plugin not connecting">
+    - Check the subprocess is running: `phbcli status`
+    - Check the plugin logs (stdout/stderr of the subprocess)
+    - Verify the command in `~/.phbcli/channels/<name>.json` is on `PATH`
+    - Try running the plugin manually: `phb-channel-telegram --phb-ws ws://127.0.0.1:18081`
+  </Accordion>
+  <Accordion title="Credentials not reaching on_configure">
+    - Make sure the `config` key in the JSON file is populated (not `{}`)
+    - Config is pushed immediately after `channel.register` — check your logs
+  </Accordion>
+  <Accordion title="Testing without a real third-party account">
+    Use the echo channel: `phbcli channel setup echo` — it reflects any outbound message back as inbound, letting you verify the full round-trip pipeline.
+  </Accordion>
+</AccordionGroup>
 
-**Credentials not reaching `on_configure`?**
-- Make sure the `config` key in the JSON file is populated (not `{}`)
-- Config is pushed immediately after `channel.register` — check your logs
+---
 
-**Testing without a real third-party account?**
-- Use the echo channel: `phbcli channel setup echo` — it reflects any outbound
-  message back as inbound, letting you verify the full round-trip pipeline.
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Channel plugin architecture" icon="plug" href="/architecture/plugins/channel-plugin-architecture">
+    Subprocess model, JSON-RPC protocol, and message flow diagrams.
+  </Card>
+  <Card title="Communication Manager" icon="arrows-left-right" href="/architecture/communication-manager">
+    The message router that handles inbound and outbound queuing.
+  </Card>
+</CardGroup>

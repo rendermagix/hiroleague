@@ -1,18 +1,33 @@
 graph LR
-    Phone["📱 Mobile Device"]
-    Web["🌐 Web Browser"]
-    Laptop["💻 Laptop / Desktop"]
+    CLI["CLI"]
+    Dev1["Device 1"]
+    Dev2["Device 2"]
+    Tools(["Tools"])
 
-    subgraph Cloud["☁️  Internet"]
-        VPS["VPS Gateway\ncloud server"]
+    subgraph ServerProcess["Server Process"]
+        subgraph ChanMgr["Channel Manager"]
+            CDP["Channel Device<br/>Plugin"]
+        end
+
+        subgraph CommMgr["Communication Manager"]
+            IQ[("Inbound<br/>Queue")]
+            OQ[("Outbound<br/>Queue")]
+        end
+
+        subgraph AgentMgr["Agent Manager"]
+            PM["Process<br/>Message"]
+        end
+
+        HTTP["HTTP Server"]
+
+        CDP --> IQ
+        IQ --> PM
+        PM --> OQ
+        OQ --> CDP
+        PM -->|invoke| Tools
+        HTTP -->|invoke| Tools
     end
 
-    subgraph RootNode["🖥️  Root Node — Desktop"]
-        WS["Workspace\nserver process"]
-    end
-
-    Phone -->|"WebSocket · HTTPS"| VPS
-    Web -->|"WebSocket · HTTPS"| VPS
-    Laptop -->|"WebSocket · HTTPS"| VPS
-
-    WS <-->|"outbound tunnel · WebSocket"| VPS
+    CLI -->|use| Tools
+    Dev1 <-->|WebSocket| CDP
+    Dev2 <-->|WebSocket| CDP

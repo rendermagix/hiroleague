@@ -1,22 +1,22 @@
 graph LR
-    GW["🔒 Gateway\nauth boundary"]
-    ExtAPI["🌐 External APIs\nTelegram · WhatsApp · …"]
+    GW["🔒 Gateway<br/>auth boundary"]
+    ExtAPI["🌐 External APIs<br/>Telegram · WhatsApp · …"]
 
     subgraph ServerProcess["🖥️  Server Process — one workspace"]
         direction TB
 
-        HTTP["HTTP Server  :18080\n/status · /channels · /tools · /invoke"]
+        HTTP["HTTP Server  :18080<br/>/status · /channels · /tools · /invoke"]
 
         subgraph ChannelLayer["Channel Manager  :18081"]
             direction TB
-            PM["Plugin Manager\nWebSocket server"]
-            CH1["channel-device\nsubprocess"]
-            CH2["channel-telegram\nsubprocess"]
-            CH3["channel-whatsapp\nsubprocess"]
+            PM["Plugin Manager<br/>WebSocket server"]
+            CH1["channel-device<br/>subprocess"]
+            CH2["channel-telegram<br/>subprocess"]
+            CH3["channel-whatsapp<br/>subprocess"]
         end
 
-        CM["Communication Manager\ninbound queue  ·  outbound queue\npermission checks"]
-        AM["Agent Manager\nLangChain  ·  LangGraph memory\nthread_id = channel:sender_id"]
+        CM["Communication Manager<br/>inbound queue  ·  outbound queue<br/>permission checks"]
+        AM["Agent Manager<br/>LangChain  ·  LangGraph memory<br/>thread_id = channel:sender_id"]
 
         PM <-->|"JSON-RPC 2.0 · local WS"| CH1
         PM <-->|"JSON-RPC 2.0 · local WS"| CH2

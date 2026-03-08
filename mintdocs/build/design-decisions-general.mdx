@@ -1,0 +1,46 @@
+---
+title: "General"
+description: "Key design decisions made during the early development of Private Home Box."
+---
+
+## Online documentation
+
+We evaluated Mintlify, Docusaurus, MKDocs, unmint, and pDoc. GitHub Wiki was also considered.
+
+After [comparing the options](https://chatgpt.com/share/69a855f4-f80c-800b-9cfa-b6567bbe9330), we chose **Mintlify** because:
+
+- Used by [OpenClaw](https://github.com/openclaw/openclaw) — thanks for the hint!
+- Best UI and feature set among the candidates.
+- Generous Hobby tier.
+
+Known limitations:
+
+- The GitHub sync setup was not smooth.
+- The main URL assigned at signup cannot be changed.
+
+## Programming language
+
+| Layer | Language |
+|---|---|
+| Desktop (Root Node) | Python, TypeScript |
+| Device nodes | Flutter |
+
+[LangChain](https://www.langchain.com/) is used for AI and agentic processing.
+
+## Online access
+
+There are several options for external communication:
+
+| Method | Requirements |
+|---|---|
+| Telegram | Set up a bot |
+| WhatsApp | New phone number (possibly eSIM) |
+| Tailscale | Free account |
+| VPN | Easy to set up |
+| Relay Gateway | Easy to set up |
+
+WebSocket / JSON-RPC is the communication protocol between components.
+
+## AI framework
+
+[LangChain](https://www.langchain.com/) handles all AI and agentic processing on the desktop layer.

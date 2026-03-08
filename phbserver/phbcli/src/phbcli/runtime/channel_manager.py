@@ -1,4 +1,4 @@
-"""PluginManager — phbcli-side orchestrator for channel plugins.
+"""ChannelManager — phbcli-side orchestrator for channel plugins.
 
 Responsibilities:
   - Runs a local WebSocket server on plugin_port (default 18081).
@@ -63,7 +63,7 @@ class _ConnectedChannel:
     pending: dict[str, asyncio.Future[Any]] = field(default_factory=dict)
 
 
-class PluginManager:
+class ChannelManager:
     """Manages the lifecycle of channel plugins as subprocesses."""
 
     def __init__(

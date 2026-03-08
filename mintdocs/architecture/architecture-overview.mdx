@@ -1,159 +1,169 @@
 ---
-title: "Architecture overview"
-description: "How Private Home Box is structured — from global topology to the internals of a running workspace."
+title: "Overview"
+description: "The core concepts behind Private Home Box and how they fit together."
 icon: "sitemap"
 ---
 
-Private Home Box (PHB) is a personal AI infrastructure that runs on your own hardware. Your desktop is the root of trust: it holds the master key, runs the AI agents, and owns all data. External devices and services connect to it — never the other way around.
-
-## Key concepts
-
-| Concept | What it is |
-|---|---|
-| **Root Node** | Your desktop. Runs one or more workspaces. The master key lives here. |
-| **Workspace** | An isolated server process (config, keys, ports, channels). You can have `production`, `dev`, `test` — each fully independent. |
-| **Gateway** | The authentication and routing boundary between device nodes and a workspace. Can run locally or on a VPS. |
-| **Device Node** | Any client that connects to PHB — mobile app, web browser, another desktop. |
-| **Channel** | A messaging integration (Telegram, WhatsApp, mobile app, etc.) running as a subprocess inside a workspace. |
+Private Home Box (PHB) is a personal AI infrastructure that runs on your own hardware. Your desktop runs the agents, owns all your data, and manages all connected devices and services.
 
 ---
 
-## Deployment topologies
+## Core concepts
 
-### All-local setup
+### Root Node
 
-Everything runs on your local network. The Gateway runs on the same machine as the Root Node. Device nodes connect directly over LAN or Wi-Fi.
+The Root Node is your desktop machine — the central computer running Private Home Box. It is the owner of all data, the authority for authentication, and the host for one or more workspaces.
+
+Every workspace runs as a separate server process on the Root Node. Device nodes connect to it through a Gateway; the Root Node never connects outward to them.
+
+### Server (PHBCLI)
+
+`phbcli` is the command-line interface used to create, configure, and run workspaces. The same operations available through the CLI are also exposed as HTTP endpoints and as tools the AI agent can invoke — all sharing a single unified tool interface.
+
+When you start a workspace, `phbcli` launches a server process that runs all workspace components concurrently.
+
+### Device nodes
+
+A device node is any client that connects to Private Home Box — a mobile app, a web browser, another desktop. Device nodes communicate with the server through a Gateway, and can send messages, receive agent responses, or report device state.
+
+### Gateway
+
+The Gateway is the authentication and routing boundary between device nodes and a workspace. It validates device identity, handles pairing, and routes traffic through to the server. Unrecognized or unpaired devices are denied before they can reach the workspace.
+
+A Gateway instance can run directly on the Root Node for local access, or on a cloud VPS for remote access over the internet. In both cases, the Root Node initiates the connection outward — no inbound ports need to be opened on your home network. One Gateway instance connects to exactly one workspace.
+
+### Workspace
+
+A workspace is an isolated runtime environment: its own configuration, keys, ports, and data. You can run multiple workspaces on the same Root Node — for example, `production`, `dev`, and `test` — each fully independent of the others.
+
+A workspace is a data container and configuration unit. The server process loads a workspace at startup; the workspace does not define or control the server.
+
+---
+
+## How devices connect
+
+Device nodes connect to the Root Node through a Gateway instance via WebSocket. External apps (such as Telegram and WhatsApp) connect directly to their respective channel plugins inside the server — they do not go through the Gateway.
 
 ```mermaid actions={true} placement="top-right"
 graph LR
-    Phone["📱 Mobile Device"]
-    Web["🌐 Web Browser"]
-    Laptop["💻 Laptop / Desktop"]
-
-    subgraph RootNode["🖥️  Root Node — Desktop"]
-        direction TB
-        GW["Local Gateway"]
-        WS["Workspace\nserver process"]
-        GW <-->|"internal routing"| WS
+    subgraph DeviceNodes["Device Nodes"]
+        Mobile["Mobile"]
+        Web["Web"]
+        Desktop["Desktop"]
     end
 
-    Phone -->|"WebSocket · LAN"| GW
-    Web -->|"WebSocket · LAN"| GW
-    Laptop -->|"WebSocket · LAN"| GW
+    subgraph ExtApps["External Apps"]
+        WA["WhatsApp"]
+        TG["Telegram"]
+    end
+
+    subgraph GatewayZone["Gateway"]
+        GWI["Gateway<br/>Instance 1"]
+    end
+
+    subgraph RootNode["Root Node"]
+        subgraph Server["Server (W1)"]
+            ChDev["channel-device"]
+            ChWS["channel-ws"]
+            ChTG["channel-telegram"]
+        end
+    end
+
+    Mobile -->|"WS"| GWI
+    Web -->|"WS"| GWI
+    Desktop -->|"WS"| GWI
+
+    GWI -->|"WS"| ChDev
+
+    WA --> ChWS
+    TG --> ChTG
 ```
 
 <Frame caption="View full size">
-  <img src="/images/diagrams/architecture-overview--diagram-1.png" alt="All-local setup topology diagram" width="100" />
+  <img src="/images/diagrams/architecture-overview--diagram-1.png" alt="Device nodes and external apps connecting to server channels" width="100" />
 </Frame>
-
-<Note>
-  In this setup, devices must be on the same local network as the Root Node. Use a VPN or Tailscale if you need remote access without a VPS Gateway.
-</Note>
 
 ---
 
-### VPS Gateway setup
+## Server components
 
-The Gateway runs on a cloud VPS. Device nodes connect to the VPS over the internet. The VPS tunnels authenticated traffic back to the Root Node workspace over a persistent outbound connection.
+The server process runs all of the following components as concurrent asyncio coroutines inside a single Python process. Each has a distinct responsibility.
 
-```mermaid actions={true} placement="top-right"
-graph LR
-    Phone["📱 Mobile Device"]
-    Web["🌐 Web Browser"]
-    Laptop["💻 Laptop / Desktop"]
+### Channel Manager
 
-    subgraph Cloud["☁️  Internet"]
-        VPS["VPS Gateway\ncloud server"]
-    end
+The Channel Manager spawns and supervises channel plugins — subprocesses that handle inbound and outbound messages for each connected interface. The core plugin is `channel-device`, which manages WebSocket connections from device nodes.
 
-    subgraph RootNode["🖥️  Root Node — Desktop"]
-        WS["Workspace\nserver process"]
-    end
+Each channel plugin runs as a separate subprocess and communicates back to the server over a local WebSocket using JSON-RPC 2.0.
 
-    Phone -->|"WebSocket · HTTPS"| VPS
-    Web -->|"WebSocket · HTTPS"| VPS
-    Laptop -->|"WebSocket · HTTPS"| VPS
+### Communication Manager
 
-    WS <-->|"outbound tunnel · WebSocket"| VPS
-```
+The Communication Manager is the central message router inside the server. It maintains an inbound queue (messages arriving from channels) and an outbound queue (replies going back to channels). It also runs permission checks before messages reach the agent.
 
-<Frame caption="View full size">
-  <img src="/images/diagrams/architecture-overview--diagram-2.png" alt="VPS Gateway setup topology diagram" width="100" />
-</Frame>
+### Agent Manager
 
-<Note>
-  The Root Node initiates the connection to the VPS Gateway — no inbound ports need to be opened on your home network.
-</Note>
+The Agent Manager consumes messages from the Communication Manager's inbound queue, runs them through a LangChain agent, and pushes replies to the outbound queue. The agent can invoke Tools as part of processing a message.
 
----
+### HTTP Server
 
-## Inside a workspace
+The HTTP Server exposes the workspace's REST API — for status checks, channel listing, tool listing, and direct tool invocation. It uses the same Tool interface as the CLI and the Agent Manager.
 
-Each workspace runs as a single Python process. All components run as `asyncio` coroutines in a single `asyncio.gather`. Channel plugins run as separate subprocesses connected back over a local WebSocket.
+### Tools
+
+Tools is the shared execution layer used by the CLI, the HTTP Server, and the Agent Manager. Any operation you can run from the command line can also be triggered via HTTP or requested from the agent.
 
 ```mermaid actions={true} placement="top-right"
 graph LR
-    GW["🔒 Gateway\nauth boundary"]
-    ExtAPI["🌐 External APIs\nTelegram · WhatsApp · …"]
+    CLI["CLI"]
+    Dev1["Device 1"]
+    Dev2["Device 2"]
+    Tools(["Tools"])
 
-    subgraph ServerProcess["🖥️  Server Process — one workspace"]
-        direction TB
-
-        HTTP["HTTP Server  :18080\n/status · /channels · /tools · /invoke"]
-
-        subgraph ChannelLayer["Channel Manager  :18081"]
-            direction TB
-            PM["Plugin Manager\nWebSocket server"]
-            CH1["channel-device\nsubprocess"]
-            CH2["channel-telegram\nsubprocess"]
-            CH3["channel-whatsapp\nsubprocess"]
+    subgraph ServerProcess["Server Process"]
+        subgraph ChanMgr["Channel Manager"]
+            CDP["Channel Device<br/>Plugin"]
         end
 
-        CM["Communication Manager\ninbound queue  ·  outbound queue\npermission checks"]
-        AM["Agent Manager\nLangChain  ·  LangGraph memory\nthread_id = channel:sender_id"]
+        subgraph CommMgr["Communication Manager"]
+            IQ[("Inbound<br/>Queue")]
+            OQ[("Outbound<br/>Queue")]
+        end
 
-        PM <-->|"JSON-RPC 2.0 · local WS"| CH1
-        PM <-->|"JSON-RPC 2.0 · local WS"| CH2
-        PM <-->|"JSON-RPC 2.0 · local WS"| CH3
+        subgraph AgentMgr["Agent Manager"]
+            PM["Process<br/>Message"]
+        end
 
-        PM -->|"on_message"| CM
-        CM -->|"inbound queue"| AM
-        AM -->|"enqueue_outbound"| CM
-        CM -->|"send_to_channel"| PM
+        HTTP["HTTP Server"]
+
+        CDP --> IQ
+        IQ --> PM
+        PM --> OQ
+        OQ --> CDP
+        PM -->|invoke| Tools
+        HTTP -->|invoke| Tools
     end
 
-    GW <-->|"device traffic"| CH1
-    ExtAPI <-->|"bot API"| CH2
-    ExtAPI <-->|"bot API"| CH3
+    CLI -->|use| Tools
+    Dev1 <-->|WebSocket| CDP
+    Dev2 <-->|WebSocket| CDP
 ```
 
 <Frame caption="View full size">
-  <img src="/images/diagrams/architecture-overview--diagram-3.png" alt="Workspace internals diagram" width="100" />
+  <img src="/images/diagrams/architecture-overview--diagram-2.png" alt="Server process components and message flow" width="100" />
 </Frame>
-
----
-
-## Component summary
-
-| Component | Role | Details |
-|---|---|---|
-| **HTTP Server** | REST API for status, tooling, and agent invocation | [Tools architecture](/architecture/tools-architecture) |
-| **Channel Manager** | Spawns and supervises channel subprocesses | [Channel plugin architecture](/channel-plugin-architecture) |
-| **Communication Manager** | Central message router; inbound/outbound queues; permission checks | [Communication manager](/communication-manager) |
-| **Agent Manager** | LLM worker; LangChain agent; per-conversation memory | [Agent manager](/agent-manager) |
-| **Gateway** | Auth boundary; validates device attestations; routes traffic | [Gateway](/phb/gateway-instances) |
-| **phb-channel-sdk** | Shared SDK; `UnifiedMessage` model; JSON-RPC helpers | [Channel plugin guide](/channel-plugin-guide) |
 
 ---
 
 ## What's next
 
 <CardGroup cols={2}>
-  <Card title="Channel plugin architecture" icon="plug" href="/channel-plugin-architecture">
-    How channels are built, spawned, and communicate over JSON-RPC 2.0.
+  <Card title="Channel Manager" icon="plug" href="/architecture/channel-manager">
+    Plugin spawning, subprocess lifecycle, and JSON-RPC communication.
   </Card>
-  <Card title="Agent manager" icon="robot" href="/agent-manager">
-    LangChain agent setup, conversation memory, and adding tools.
+  <Card title="Communication Manager" icon="arrows-left-right" href="/architecture/communication-manager">
+    Message routing, inbound/outbound queues, and permission checks.
+  </Card>
+  <Card title="Agent Manager" icon="robot" href="/architecture/agent-manager">
+    LLM worker, conversation memory, and available tools.
   </Card>
   <Card title="Gateway instances" icon="shield" href="/phb/gateway-instances">
     Local vs VPS gateway configuration and device authentication.

@@ -17,8 +17,8 @@ env/
 htmlcov/
 
 # Build artifacts
-build/
-dist/
+# build/ # this is too generic... conflicts in mintdocs folders..
+# dist/ # this is too generic...
 *.egg-info/
 .eggs/
 

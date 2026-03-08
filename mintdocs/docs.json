@@ -14,6 +14,13 @@
         "tab": "Private Home Box",
         "groups": [
           {
+            "group": "Get Started",
+            "pages": [
+              "phb/introduction",
+              "phb/quickstart"
+            ]
+          },
+          {
             "group": "CLI",
             "pages": [
               "phb/setup-and-uninstall",
@@ -37,11 +44,60 @@
       },
       {
         "tab": "Architecture",
-        "pages": [
-          "architecture/architecture-overview",
-          "architecture/general",
-          "architecture/constants",
-          "architecture/tools-architecture"
+        "groups": [
+          {
+            "group": "Concepts",
+            "pages": [
+              "architecture/architecture-overview",
+              "architecture/channel-manager",
+              "architecture/communication-manager",
+              "architecture/agent-manager"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "architecture/general",
+              "architecture/constants",
+              "architecture/tools-architecture",
+              "architecture/device-auth"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "architecture/plugins/channel-plugin-architecture",
+              "architecture/plugins/creating-channel-plugins"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Build & Contribute",
+        "groups": [
+          {
+            "group": "Design decisions",
+            "pages": [
+              "build/design-decisions-general",
+              "build/flutter-app",
+              "build/terminal-logging",
+              "build/server-logging",
+              "build/server-auto-start",
+              "build/inspiration"
+            ]
+          },
+          {
+            "group": "Local build",
+            "pages": [
+              "build/setup"
+            ]
+          },
+          {
+            "group": "Contribution",
+            "pages": [
+              "build/contributing"
+            ]
+          }
         ]
       }
     ]

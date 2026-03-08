@@ -16,6 +16,7 @@ Pages are organized by tab, one folder per tab:
 |---|---|---|
 | `phb/` | Private Home Box | CLI and Gateway reference pages |
 | `architecture/` | Architecture | Architecture overview and design pages |
+| `build/` | Build & Contribute | Design decisions, local build setup, contribution guides |
 
 When creating a new page, place it in the folder that matches its tab. When linking to a page, always use the full root-relative path including the folder: `/phb/gateway-instances`, `/architecture/tools-architecture`.
 
@@ -53,9 +54,11 @@ graph LR
 ```
 ~~~
 
-- Use `graph LR` (left-right) for all topology and flow diagrams — never `graph TD`
+- Use `graph LR` (left-right) for topology diagrams and diagrams with few steps
+- Use `graph TD` (top-down) for sequential step-by-step flows with many serial steps (e.g. message processing pipelines, decision trees) — TD renders these more clearly than LR
 - Do NOT use the ELK renderer (`%%{init: {'flowchart': {'defaultRenderer': 'elk'}}}%%`) — it fails silently in Mintlify's hosted environment
 - Always include `actions={true} placement="top-right"` on every diagram
+- Use `<br/>` for line breaks inside node labels — `\n` renders as a literal string in Mintlify's Mermaid renderer
 
 ### 2. Always add a Frame thumbnail immediately after the closing fence
 

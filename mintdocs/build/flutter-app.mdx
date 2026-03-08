@@ -1,0 +1,281 @@
+---
+title: "Flutter app"
+description: "Architecture guidelines for the PHB Flutter mobile and desktop app."
+---
+
+<Note>
+No backward compatibility is required — this is a clean-slate build. The existing `device_apps` demo code is a reference only; the new app replaces it entirely.
+</Note>
+
+## Locked decisions
+
+| # | Decision |
+|---|---|
+| 1 | Transport: WSS only. No E2E encryption for now. |
+| 2 | Sync: online-first with a minimal outbox/retry for reliability. |
+| 3 | Identity: one device can have multiple workspaces; each workspace has one active identity. |
+| 4 | Message ordering: server timestamp is canonical; client timestamp is UI fallback only. |
+| 5 | Notifications: local notifications first; push is a pluggable module added later. |
+| 6 | Deep links: not required for production, but `go_router` URL structure is kept for dev/debug convenience. |
+| 7 | i18n: not urgent, but the architecture must not block it (no hardcoded strings in widgets). |
+| 8 | Local DB: messages and channels are cached locally in the app (Drift/SQLite). Server is the source of truth on refresh. |
+
+## Core concepts (domain language)
+
+These terms must be used consistently everywhere — in code, comments, and AI prompts.
+
+| Term | Meaning |
+|---|---|
+| **Workspace** | A named connection to one PHB gateway instance. A device can have multiple workspaces. |
+| **Identity** | The cryptographic keypair + attestation for one workspace. |
+| **Channel** | A topic or conversation thread. Channels are listed in the sidebar. |
+| **Bot** | A personality/agent. A bot is NOT a channel — it is an entity that can be assigned to, or participate in, a channel. |
+| **Session** | A conversation context within a channel. A channel can have multiple sessions (like threads). |
+| **Message** | A single unit of communication in a channel/session. Has a type: text, image, video, voice, location, file. |
+| **Gateway** | The WebSocket server the app connects to. |
+
+## State management: Riverpod v2
+
+**Why Riverpod over Provider:**
+
+- Provider requires `BuildContext` to read state — Riverpod does not. This matters for services, repositories, and background tasks.
+- Riverpod's `AsyncNotifier` handles loading/error/data states cleanly without boilerplate.
+- Compile-time safety with `@riverpod` code generation — no string keys, no runtime errors.
+- Providers are composable and testable in isolation.
+- Scales to the complexity of this app (multiple workspaces, per-channel message streams, gateway lifecycle).
+
+**Rule:** One state approach across the entire app. Never mix Provider + Riverpod + Bloc.
+
+## Architecture: feature-first + 3-layer
+
+Each feature is a vertical slice. Inside each feature, three layers exist:
+
+```
+Presentation  →  Application  →  Domain  ←  Data
+(widgets)        (providers)     (models,    (repositories,
+                 (notifiers)      contracts)  remote, local)
+```
+
+**Dependency rule:**
+
+- `domain` has zero Flutter or third-party dependencies. Pure Dart.
+- `data` implements `domain` contracts (repository interfaces).
+- `application` (Riverpod providers/notifiers) wires domain + data together.
+- `presentation` reads providers only. Never touches repositories or services directly.
+
+## Folder structure
+
+```
+lib/
+├── main.dart                    # ProviderScope, bootstrap only
+├── app.dart                     # MaterialApp.router, theme, router config
+│
+├── core/                        # Shared primitives — no feature logic here
+│   ├── constants/
+│   ├── errors/
+│   ├── extensions/
+│   ├── utils/
+│   └── ui/                      # Design system / UI kit
+│       ├── atoms/
+│       ├── molecules/
+│       └── theme/
+│
+├── config/
+│   └── router/
+│
+├── platform/                    # Platform-specific adapters behind interfaces
+│   ├── biometrics/
+│   ├── notifications/
+│   ├── media/
+│   └── storage/
+│
+├── data/                        # Data layer — no UI here
+│   ├── local/
+│   │   ├── database/
+│   │   └── cache/
+│   ├── remote/
+│   │   ├── gateway/
+│   │   └── http/
+│   └── repositories/
+│
+├── domain/                      # Pure Dart — zero Flutter dependency
+│   ├── models/
+│   ├── repositories/            # Contracts (abstract classes only)
+│   └── services/
+│
+├── application/                 # Riverpod providers and notifiers
+│   ├── providers.dart
+│   ├── auth/
+│   ├── gateway/
+│   ├── channels/
+│   ├── messages/
+│   └── ...
+│
+└── features/                    # Presentation layer — screens and widgets
+    ├── shell/
+    ├── onboarding/
+    ├── lock/
+    ├── channels/
+    ├── chat/
+    ├── bots/
+    └── settings/
+```
+
+## Routing structure
+
+```
+/                                → redirect: auth guard → lock guard → /app/channels
+/onboarding                      → OnboardingScreen
+/lock                            → LockScreen
+/workspaces                      → WorkspaceListScreen
+/app  (StatefulShellRoute)       → AppShell
+  /app/channels                  → ChannelListScreen
+  /app/channels/:channelId       → ChatScreen
+  /app/channels/:channelId/sessions/:sessionId  → SessionChatScreen
+  /app/bots                      → BotListScreen
+  /app/bots/:botId               → BotWebViewScreen
+  /app/bots/:botId/stream        → PixelStreamScreen
+  /app/settings                  → SettingsScreen
+```
+
+On narrow screens (mobile): channels list and chat are stacked (push navigation).
+On wide screens (tablet/desktop/web): `StatefulShellRoute` renders both panels side-by-side in a `Row` inside `AppShell`.
+
+## Key implementation rules
+
+### Models
+
+- Every domain model uses `freezed`. No mutable model classes anywhere.
+- JSON serialization lives in `data/` DTOs, not domain models. A mapper converts DTO → domain model.
+- Never pass raw `Map<String, dynamic>` outside the `data/` layer.
+
+### Widgets
+
+- Screens are thin: they read providers and pass data down to child widgets.
+- No business logic in widgets. No repository calls from widgets.
+- No `if/else` chains dispatching message types in one widget — use `switch` in a dispatcher widget that delegates to typed sub-widgets.
+- Strings are never hardcoded in widgets. Use a constants file or ARB files (i18n-ready from day one).
+- Split any widget that exceeds ~80 lines into smaller named widgets.
+
+### Gateway / WebSocket
+
+- `GatewayClient` owns the raw connection, reconnect loop, and heartbeat. It knows nothing about domain models.
+- `GatewayProtocol` handles frame parsing. It converts raw JSON to typed DTOs.
+- `GatewayAuthHandler` handles the challenge/response and pairing flow.
+- `GatewayNotifier` (Riverpod) owns the connection lifecycle and exposes state to the UI.
+- `MessageRepository` subscribes to the gateway stream and writes to the local Drift DB.
+- The UI reads from the local DB stream — it never reads directly from the WebSocket.
+
+### Outbox pattern
+
+When a message send fails (no connection), it goes into a local outbox table. `OutboxService` retries on reconnect. Message status in the UI reflects: `sending → sent → delivered → read` or `failed`.
+
+### Platform abstraction
+
+Anything that behaves differently on Android vs web vs iOS vs desktop lives in `platform/` behind an abstract interface. Features never import from `platform/` directly — they go through the provider.
+
+### Adaptive layout
+
+- `AppShell` detects screen width and renders either a `NavigationRail` (wide) or `NavigationBar` (narrow).
+- The split-pane (channel list + chat) is implemented inside `StatefulShellRoute`.
+- A single `AdaptiveLayout.isWide(context)` utility (based on `MediaQuery.sizeOf`) is the single source of truth for breakpoints.
+
+### Theming
+
+- `AppTheme` provides both light and dark `ThemeData` using `flex_color_scheme`.
+- No hardcoded colors or text styles in widgets — always use `Theme.of(context)` or named tokens from `app_colors.dart`.
+- Theme mode is persisted in `SettingsRepository` and restored on startup.
+
+## Packages
+
+```yaml
+dependencies:
+  # State
+  flutter_riverpod: ^2.x
+  riverpod_annotation: ^2.x
+
+  # Navigation
+  go_router: ^14.x
+
+  # Models
+  freezed_annotation: ^2.x
+  json_annotation: ^4.x
+
+  # Local DB
+  drift: ^2.x
+  sqlite3_flutter_libs: ^0.x
+
+  # Theming
+  flex_color_scheme: ^8.x
+
+  # Secure storage
+  flutter_secure_storage: ^9.x
+
+  # WebSocket
+  web_socket_channel: ^3.x
+
+  # Crypto
+  cryptography: ^2.x
+
+  # Biometrics
+  local_auth: ^2.x
+
+  # QR scanning
+  mobile_scanner: ^6.x
+
+  # Media
+  image_picker: ^1.x
+  file_picker: ^8.x
+
+  # Notifications
+  flutter_local_notifications: ^18.x
+
+  # WebView
+  webview_flutter: ^4.x
+
+dev_dependencies:
+  build_runner: ^2.x
+  freezed: ^2.x
+  json_serializable: ^6.x
+  riverpod_generator: ^2.x
+  drift_dev: ^2.x
+```
+
+## Build order
+
+| Phase | Features |
+|---|---|
+| 1 — Foundation | Folder structure, theme, router, AppShell (adaptive layout), core utilities |
+| 2 — Identity | Onboarding (QR + pairing code), crypto, identity storage, workspace model |
+| 3 — Lock | Biometric/PIN lock screen, lock guard in router |
+| 4 — Gateway | GatewayClient, protocol, auth handler, reconnect, GatewayNotifier |
+| 5 — Channels | Channel list, local DB, channel repository, channel list screen |
+| 6 — Chat | Message model, MessageRepository (DB + gateway sync), chat screen, text bubble, input bar |
+| 7 — Rich messages | Image, voice, video, location, file bubbles; attachment picker |
+| 8 — Reply/Forward | Reply preview, forward action, message context menu |
+| 9 — Bots | Bot model, bot list, bot assignment to channel, bot WebView screen |
+| 10 — Sessions | Session model, session list, session chat |
+| 11 — Pixel streaming | PixelStreamScreen with WebView + JS bridge |
+| 12 — Notifications | Local notification service, notification on incoming message |
+| 13 — Settings | Theme toggle, security settings, gateway settings |
+| 14 — Multi-workspace | Workspace switcher, per-workspace identity, workspace-scoped providers |
+| 15 — i18n | ARB files, `flutter_localizations`, string extraction |
+
+## AI coding guardrails
+
+Use these verbatim in prompts when working with an AI coding assistant:
+
+1. "Implement by feature slice. Each feature has its own folder under `features/` for presentation and `application/` for state."
+2. "Respect the 3-layer boundary: `features/` → `application/` → `domain/` ← `data/`. No layer may skip a level."
+3. "Do not place business logic in widgets. Widgets read providers and render data."
+4. "Do not access the gateway, database, or any service directly from a widget or screen."
+5. "No raw `Map<String, dynamic>` outside `data/`. All data crossing the data/domain boundary must be a typed, freezed model."
+6. "Every new feature requires: a freezed domain model, a repository contract in `domain/repositories/`, an implementation in `data/repositories/`, and a Riverpod notifier in `application/`."
+7. "All platform-specific behavior (biometrics, notifications, file system, WebView) must be behind an abstract interface in `platform/`."
+8. "No hardcoded strings in widgets. Use constants or ARB keys."
+9. "No hardcoded colors or text styles in widgets. Use `Theme.of(context)` tokens."
+10. "The gateway connection lifecycle lives in `GatewayNotifier`. The UI reads message data from the local DB stream via `MessageRepository`, not from the WebSocket directly."
+11. "Adaptive layout breakpoints use `AdaptiveLayout.isWide(context)` only. No inline `MediaQuery` width checks scattered across widgets."
+12. "A Bot is not a Channel. They are separate domain models with separate providers and separate screens."
+13. "Message bubble rendering uses a dispatcher widget that switches on `MessageType` and delegates to a typed sub-widget. No monolithic bubble widget."
+14. "State management is Riverpod v2 with code generation (`@riverpod`). Do not introduce Provider, Bloc, or GetX anywhere."

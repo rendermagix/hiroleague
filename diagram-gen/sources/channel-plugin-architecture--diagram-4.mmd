@@ -1,0 +1,21 @@
+graph TD
+    START["phbcli start"]
+    WSS["ChannelManager starts<br/>WS server :18081"]
+    READ["reads ~/.phbcli/channels/*.json"]
+    SPAWN["subprocess.Popen per<br/>enabled channel"]
+    LOGINIT["log_setup.init()"]
+    TRANSPORT["PluginTransport.run()"]
+    CONNECT["connects to ws://127.0.0.1:18081"]
+    REG["sends channel.register"]
+    ONSTART["plugin.on_start()"]
+    RUNNING["running — polling / webhooks"]
+
+    START --> WSS
+    WSS --> READ
+    READ --> SPAWN
+    SPAWN --> LOGINIT
+    LOGINIT --> TRANSPORT
+    TRANSPORT --> CONNECT
+    CONNECT --> REG
+    REG --> ONSTART
+    ONSTART --> RUNNING

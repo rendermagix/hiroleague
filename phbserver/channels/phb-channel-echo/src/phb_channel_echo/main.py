@@ -1,6 +1,6 @@
 """Entry point for the phb-channel-echo plugin process.
 
-Invoked by phbcli's PluginManager as:
+Invoked by phbcli's ChannelManager as:
     phb-channel-echo --phb-ws ws://127.0.0.1:18081
 """
 

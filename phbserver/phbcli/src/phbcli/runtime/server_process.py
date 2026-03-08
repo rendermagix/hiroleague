@@ -1,6 +1,6 @@
 """Entry point for the detached server process spawned by `phbcli start`.
 
-Runs the FastAPI HTTP server and PluginManager concurrently inside a single
+Runs the FastAPI HTTP server and ChannelManager concurrently inside a single
 asyncio event loop.  Gateway connectivity is owned by the mandatory
 `devices` channel plugin.
 
@@ -76,7 +76,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     from phbcli.domain.agent_config import load_agent_config, load_system_prompt
     from phbcli.runtime.agent_manager import AgentManager
     from phbcli.runtime.communication_manager import CommunicationManager
-    from phbcli.runtime.plugin_manager import PluginManager
+    from phbcli.runtime.channel_manager import ChannelManager
     from phbcli.runtime.http_server import run_http_server, set_channel_info_provider, set_tool_registry, set_workspace_path
     from phbcli.tools import all_tools
     from phbcli.tools.registry import ToolRegistry
@@ -98,7 +98,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     tool_registry.register_all(all_tools())
     set_tool_registry(tool_registry)
 
-    plugin_manager: PluginManager | None = None
+    channel_manager: ChannelManager | None = None
 
     def _shutdown(*_: object) -> None:
         log.info("Shutdown signal received")
@@ -111,14 +111,14 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
         signal.signal(signal.SIGINT, _shutdown)
 
     async def _on_channel_event(event: str, data: dict[str, object]) -> None:
-        nonlocal plugin_manager
+        nonlocal channel_manager
         if event == "gateway_connected":
             gateway_url = str(data.get("gateway_url") or config.gateway_url)
             mark_connected(workspace_path, gateway_url)
         elif event == "gateway_disconnected":
             mark_disconnected(workspace_path)
         elif event == "pairing_request":
-            if plugin_manager is None:
+            if channel_manager is None:
                 return
             request_id = data.get("request_id")
             pairing_code = data.get("pairing_code")
@@ -126,13 +126,13 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
             if not isinstance(request_id, str) or not request_id:
                 return
             if not isinstance(pairing_code, str) or not pairing_code:
-                await plugin_manager.send_event_to_channel(
+                await channel_manager.send_event_to_channel(
                     "devices", "pairing_response",
                     {"request_id": request_id, "status": "rejected", "reason": "invalid_pairing_code"},
                 )
                 return
             if not isinstance(device_public_key, str) or not device_public_key:
-                await plugin_manager.send_event_to_channel(
+                await channel_manager.send_event_to_channel(
                     "devices", "pairing_response",
                     {"request_id": request_id, "status": "rejected", "reason": "invalid_device_public_key"},
                 )
@@ -140,14 +140,14 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
 
             session = load_pairing_session(workspace_path)
             if session is None:
-                await plugin_manager.send_event_to_channel(
+                await channel_manager.send_event_to_channel(
                     "devices", "pairing_response",
                     {"request_id": request_id, "status": "rejected", "reason": "no_active_pairing_session"},
                 )
                 return
 
             if (not session.is_valid()) or (session.code != pairing_code):
-                await plugin_manager.send_event_to_channel(
+                await channel_manager.send_event_to_channel(
                     "devices", "pairing_response",
                     {"request_id": request_id, "status": "rejected", "reason": "pairing_code_invalid_or_expired"},
                 )
@@ -184,7 +184,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
                 ),
             )
             clear_pairing_session(workspace_path)
-            await plugin_manager.send_event_to_channel(
+            await channel_manager.send_event_to_channel(
                 "devices", "pairing_response",
                 {
                     "request_id": request_id,
@@ -195,15 +195,15 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
             )
 
     comm_manager = CommunicationManager()
-    plugin_manager = PluginManager(
+    channel_manager = ChannelManager(
         config,
         workspace_path,
         stop_event,
         on_message=comm_manager.receive,
         on_event=_on_channel_event,
     )
-    comm_manager.set_plugin_manager(plugin_manager)
-    set_channel_info_provider(plugin_manager.get_channel_info)
+    comm_manager.set_channel_manager(channel_manager)
+    set_channel_info_provider(channel_manager.get_channel_info)
     agent_manager = AgentManager(comm_manager, workspace_path)
 
     log.info(
@@ -216,7 +216,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
 
     coros = [
         run_http_server(config, stop_event),
-        plugin_manager.run(),
+        channel_manager.run(),
         comm_manager.run(),
         agent_manager.run(),
     ]
