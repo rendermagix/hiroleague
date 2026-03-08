@@ -1,10 +1,25 @@
 
 # Daily Tasks
-
+- Create Flutter Android App
+- Pair using QR Code
+- Biometric/Pass/Pattern Lock
+- Clean up Message Format
+- Add ability to send Voice, Image.
+- Add ability to send Commands.
+- Add ability to respond in Voice.
+- Allow showing Agent Execution, Tools, $ Consumption.
+- Allow creating channels/conversations.
+- Allow creating Bots/Selecting them.
+- Add Permission system.
+- Add Tool Plugins.
+- Add Bot Plugins.
+- Add Memory Plugins.
+- Add Plugin Discovery, Plugin Submission, rating, reviews, scanning, ecosystem...
 - add versioning.
 - Log what really matters
 
 # Refactoring
+- Gateway
 
 # Github Cleanup
 - Move code to dev branch.
@@ -12,12 +27,12 @@
 - Add Releases
 
 # Doc Related
+- Keep polishing the docs as you build the features.
 - Add Change Log to Mintdocs.
 - Need the final domain name.
 - Publish Online and link to Github
 - Versions
 - Languages
-
 
 # Add Features
 - Resource Usage (CPU/Memory/Disk/Network/LLM$)
