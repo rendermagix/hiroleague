@@ -27,7 +27,7 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.29
 
   # Theming
-  flex_color_scheme: ^8.2.0
+  flex_color_scheme: ^8.4.0
 
   # Secure storage
   flutter_secure_storage: ^9.2.4
