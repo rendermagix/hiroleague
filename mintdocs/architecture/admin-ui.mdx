@@ -217,11 +217,7 @@ The admin UI supports light and dark mode. Dark mode preference is stored in per
 
 ### Sidebar behavior
 
-The sidebar drawer uses `behavior="desktop"` so it pushes the page content aside rather than overlaying it. The `bordered` prop adds a separator line between drawer and content area.
-
-```python
-ui.left_drawer(value=True).props('behavior="desktop" bordered')
-```
+The sidebar drawer uses `behavior="desktop"` so it pushes the page content aside rather than overlaying it. The `bordered` prop adds a separator line between drawer and content area. The header menu button toggles **mini mode**: the sidebar stays open but narrows to show only icons (labels and section headers are hidden via Quasar’s `q-mini-drawer-hide` class). Mini state is persisted in user storage.
 
 On mobile breakpoints Quasar automatically switches to overlay mode regardless of this setting.
 

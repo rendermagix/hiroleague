@@ -31,3 +31,6 @@ Thumbs.db
 # Local env files
 .env
 .env.*
+
+# NiceGUI
+.nicegui/

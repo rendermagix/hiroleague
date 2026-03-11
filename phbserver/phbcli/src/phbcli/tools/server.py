@@ -320,14 +320,20 @@ def _register_autostart(workspace_id: str, elevated: bool) -> tuple[bool, str]:
         return False, "failed"
 
 
-def _unregister_autostart(workspace_id: str, elevated: bool) -> bool:
-    if elevated and sys.platform == "win32":
+def _unregister_autostart(workspace_id: str, stored_method: str | None) -> bool:
+    # "elevated" was registered via UAC Task Scheduler (HIGHEST run-level) — needs elevated removal.
+    # "schtasks" / "registry" use the standard path which tries both schtasks delete + registry delete.
+    # "skipped" / "failed" / None — nothing was registered, nothing to remove.
+    if stored_method in (None, "skipped", "failed"):
+        return False
+    if stored_method == "elevated" and sys.platform == "win32":
         try:
             accepted = unregister_autostart_elevated(workspace_id)
         except RuntimeError:
             accepted = False
         if accepted:
             return True
+        # Fall through to standard removal if UAC was declined
     try:
         unregister_autostart(workspace_id)
         return True
@@ -402,6 +408,11 @@ class SetupTool(Tool):
             autostart_registered, autostart_method = _register_autostart(
                 entry.id, elevated_task
             )
+
+        # Persist the autostart method in config.json so teardown can use it
+        # without requiring the user to re-specify --elevated-task.
+        config.autostart_method = autostart_method
+        save_config(workspace_path, config)
 
         if start_server:
             _do_start(workspace_path, config, _NullConsole(), foreground=False)
@@ -623,23 +634,19 @@ class TeardownTool(Tool):
             "Also delete the workspace folder (config, state, keys, logs…)",
             required=False,
         ),
-        "elevated_task": ToolParam(
-            bool,
-            "(Windows) Request UAC elevation to delete a high-privilege Task Scheduler entry",
-            required=False,
-        ),
     }
 
     def execute(
         self,
         workspace: str | None = None,
         purge: bool = False,
-        elevated_task: bool = False,
     ) -> TeardownResult:
         entry, registry, workspace_path = _resolve_or_create(workspace)
 
         _do_stop(workspace_path, _NullConsole())
-        autostart_removed = _unregister_autostart(entry.id, elevated_task)
+        # Read the autostart method stored in config.json at setup time — no flag needed from caller.
+        stored_config = load_config(workspace_path)
+        autostart_removed = _unregister_autostart(entry.id, stored_config.autostart_method)
 
         if purge:
             if workspace_path.exists():
@@ -664,23 +671,16 @@ class UninstallTool(Tool):
     params = {
         "workspace": ToolParam(str, "Workspace name or id to uninstall", required=False),
         "purge": ToolParam(bool, "Also delete the workspace folder", required=False),
-        "elevated_task": ToolParam(
-            bool,
-            "(Windows) Request UAC elevation to delete a high-privilege Task Scheduler entry",
-            required=False,
-        ),
     }
 
     def execute(
         self,
         workspace: str | None = None,
         purge: bool = False,
-        elevated_task: bool = False,
     ) -> UninstallResult:
         teardown_result = TeardownTool().execute(
             workspace=workspace,
             purge=purge,
-            elevated_task=elevated_task,
         )
         return UninstallResult(teardown=teardown_result)
 

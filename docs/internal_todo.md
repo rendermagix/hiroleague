@@ -17,9 +17,12 @@
 - add versioning.
 - Log what really matters
 - when server time and device time are different, how would you define the timestamp, inbound to device, or ourbound to server..
+- Better formatting of CLI UI, showing waiting animation, showing Colors, 
+- Refactor CLI UI to be more consistent and easier to use.
 
 # Admin UI
 - Figuring out Missing parts and initial arrangement
+- cleaning up orphaned channel processes, what is the best approach?
 - Logs should be a Tool, Log should have colors.
 - Workspace should be a Global Dropdown
 - Allow Loading Local Gateways
@@ -27,6 +30,11 @@
 - Add Device QR Code
 - Fine Tune Tools for better utilization
 - Work on Admin UI Security
+- Show Scheduled Tasks schtasks
+- cli uninstall will teardown a single workspace, and uninstall cli - I think uninstall should teardown all workspaces first.
+- workspace remove doesnt check if auto start is removed first (teardown) - so some services will stay orphaned.
+- clicking long actions in admin ui should show a progress bar. like start, delete workspaces, etc...
+- show a message back online when restarting admin ui.
 
 # Refactoring
 - Gateway

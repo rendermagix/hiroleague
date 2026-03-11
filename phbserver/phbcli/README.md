@@ -11,8 +11,22 @@ pip install phbcli
 ## Installation from source
 
 ```bash
-uv tool install --editable ./phbcli
+cd phbserver
+uv sync
+uv tool install --editable phbcli
 ```
+
+This installs both `phbcli` and `phb-channel-devices` binaries — the mandatory channel is bundled as a script entry in `phbcli`'s `pyproject.toml`.
+
+### After pulling updated code
+
+Run from the repo root every time you pull changes or switch environments:
+
+```bash
+./dev-sync.sh
+```
+
+> **Why not just `uv sync`?** `phbcli` is a `uv tool` — its entry-point scripts are baked at install time. If `pyproject.toml` or the package structure changes, the old script will fail with `ModuleNotFoundError`. `dev-sync.sh` stops the server (to release Windows file locks), syncs deps, and re-installs the tool.
 
 ## Quick Start
 

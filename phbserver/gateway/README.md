@@ -6,6 +6,23 @@ Accepts connections from `phbcli` desktop clients and online apps, performs
 challenge/response authentication, and relays messages between authenticated
 devices identified by `device_id`.
 
+## Dev setup
+
+`phbgateway` is part of the `phbserver` uv workspace. No separate tool install is needed — it runs directly from the workspace venv via `uv run`.
+
+After cloning or pulling updated code, run from the repo root:
+
+```bash
+./dev-sync.sh
+```
+
+Or manually:
+
+```bash
+cd phbserver
+uv sync
+```
+
 ## Quick Start
 
 ```bash

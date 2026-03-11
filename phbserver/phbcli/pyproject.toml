@@ -38,14 +38,17 @@ dependencies = [
     "qrcode>=8.0",
     "phb-channel-sdk",
     "phb-commons",
+    "phb-channel-devices",
 ]
 
 [project.scripts]
 phbcli = "phbcli.commands.app:app"
+phb-channel-devices = "phb_channel_devices.main:app"
 
 [tool.uv.sources]
 phb-channel-sdk = { workspace = true }
 phb-commons = { workspace = true }
+phb-channel-devices = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phbcli"]

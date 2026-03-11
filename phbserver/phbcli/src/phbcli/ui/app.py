@@ -71,7 +71,27 @@ def create_page_layout(active_path: str = "/") -> None:
     selected_id = stored if stored in ws_ids else default_ws_id
     nicegui_app.storage.user["selected_workspace"] = selected_id
 
-    drawer = ui.left_drawer(value=True).props('behavior="desktop" bordered')
+    # Sidebar mini state: when True, drawer shows only icons (narrow); persists in user storage.
+    if "sidebar_mini" not in nicegui_app.storage.user:
+        nicegui_app.storage.user["sidebar_mini"] = False
+    sidebar_mini = nicegui_app.storage.user["sidebar_mini"]
+
+    # width/mini-width set explicitly; Quasar default (300/57) is too wide/narrow
+    drawer = ui.left_drawer(value=True).props('behavior="desktop" bordered :width="210" :mini-width="88"')
+    # Set initial mini state if needed
+    if sidebar_mini:
+        drawer.props(add="mini")
+
+    def toggle_sidebar_mini() -> None:
+        nicegui_app.storage.user["sidebar_mini"] = not nicegui_app.storage.user["sidebar_mini"]
+        mini = nicegui_app.storage.user["sidebar_mini"]
+        
+        # Toggle mini prop on the drawer element
+        if mini:
+            drawer.props(add="mini")
+        else:
+            drawer.props(remove="mini")
+
     with drawer:
         _sidebar(active_path)
 
@@ -84,7 +104,7 @@ def create_page_layout(active_path: str = "/") -> None:
 
     with ui.header(elevated=True).classes("items-center justify-between"):
         with ui.row().classes("items-center gap-2"):
-            ui.button(icon="menu", on_click=drawer.toggle).props('flat dense round color="white"')
+            ui.button(icon="menu", on_click=toggle_sidebar_mini).props('flat dense round color="white"')
             ui.icon("home").classes("text-primary text-xl")
             ui.label(header_title).classes("text-lg font-semibold")
 
@@ -107,24 +127,32 @@ def create_page_layout(active_path: str = "/") -> None:
 
 
 def _sidebar(active_path: str) -> None:
-    """Render sidebar navigation using Quasar QItem components (auto-adapt to dark mode)."""
-    with ui.column().classes("w-full py-2"):
+    """Render sidebar navigation using Quasar QItem components (auto-adapt to dark mode).
+
+    Uses proper QItemSection structure so Quasar's mini mode auto-centers icons.
+    The avatar section's default right-padding (16px) is overridden to 8px to
+    keep icon and label close together in expanded mode.
+    Section headers and label sections use q-mini-drawer-hide to vanish in mini mode.
+    """
+    with ui.column().classes("w-full py-0"):
         for group, label, icon, path in _NAV:
             if group is None:
                 ui.label(label).classes(
-                    "text-xs font-semibold uppercase tracking-wider opacity-50 px-4 pt-3 pb-1"
+                    "text-xs font-semibold uppercase tracking-wider opacity-50 px-4 pt-1 pb-0 q-mini-drawer-hide"
                 )
             else:
                 is_active = path == active_path
                 with ui.item(on_click=lambda p=path: ui.navigate.to(p)).props(
-                    "clickable v-ripple"
-                ).classes("rounded-md mx-2 " + ("text-primary" if is_active else "")):
-                    with ui.item_section().props("avatar"):
+                    "clickable v-ripple dense"
+                ).classes("rounded-md mx-2 my-0" + (" text-primary" if is_active else "")):
+                    # avatar section: override default 16px right-gap to keep icon tight to label
+                    with ui.item_section().props("avatar").style("min-width:0; padding-right:8px"):
                         if icon:
-                            ui.icon(icon).classes(
+                            icon_elem = ui.icon(icon).classes(
                                 "text-lg " + ("text-primary" if is_active else "opacity-60")
                             )
-                    with ui.item_section():
+                            icon_elem.tooltip(label)
+                    with ui.item_section().classes("q-mini-drawer-hide"):
                         ui.label(label).classes("text-sm")
 
 

@@ -257,10 +257,6 @@ def register(app: typer.Typer, console: Console) -> None:
             False, "--purge",
             help="Also delete the workspace folder (config, state, keys, logs…).",
         ),
-        elevated_task: bool = typer.Option(
-            False, "--elevated-task",
-            help="(Windows) Request UAC elevation to delete a high-privilege Task Scheduler entry.",
-        ),
     ) -> None:
         """Stop server and remove all auto-start registrations for a workspace."""
         console.print("[bold cyan]phbcli teardown[/bold cyan]")
@@ -269,7 +265,6 @@ def register(app: typer.Typer, console: Console) -> None:
             result = TeardownTool().execute(
                 workspace=workspace,
                 purge=purge,
-                elevated_task=elevated_task,
             )
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
@@ -293,10 +288,6 @@ def register(app: typer.Typer, console: Console) -> None:
             help="Workspace to uninstall (default: registry default).",
         ),
         purge: bool = typer.Option(False, "--purge", help="Also delete the workspace folder."),
-        elevated_task: bool = typer.Option(
-            False, "--elevated-task",
-            help="(Windows) Request UAC elevation to delete a high-privilege Task Scheduler entry.",
-        ),
     ) -> None:
         """Stop server, remove auto-start, then print package uninstall commands."""
         console.print("[bold cyan]phbcli teardown[/bold cyan]")
@@ -305,7 +296,6 @@ def register(app: typer.Typer, console: Console) -> None:
             result = UninstallTool().execute(
                 workspace=workspace,
                 purge=purge,
-                elevated_task=elevated_task,
             )
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")

@@ -48,6 +48,7 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         table.add_column("ID", style="dim")
         table.add_column("Setup")
         table.add_column("Server")
+        table.add_column("Autostart")
         table.add_column("HTTP")
         table.add_column("Admin")
         table.add_column("Gateway URL")
@@ -61,13 +62,21 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
             default_marker = "[cyan]*[/cyan]" if ws["is_default"] else ""
             setup_str = "[green]configured[/green]" if ws["is_configured"] else "[yellow]needs setup[/yellow]"
             server_str = "[green]running[/green]" if running else "[dim]stopped[/dim]"
+            method = ws.get("autostart_method")
+            autostart_str = {
+                "elevated": "[magenta]elevated[/magenta]",
+                "schtasks": "[blue]schtasks[/blue]",
+                "registry": "[cyan]registry[/cyan]",
+                "skipped": "[dim]skipped[/dim]",
+                "failed": "[red]failed[/red]",
+            }.get(method or "", "[dim]—[/dim]")
             http_str = f":{ws['http_port']}"
             admin_str = f":{ws['admin_port']}"
             gw_str = ws.get("gateway_url") or "[dim]—[/dim]"
             short_id = ws["id"][:8]
             table.add_row(
                 default_marker, ws["name"], short_id, setup_str, server_str,
-                http_str, admin_str, gw_str, ws["path"],
+                autostart_str, http_str, admin_str, gw_str, ws["path"],
             )
 
         console.print(table)
@@ -219,6 +228,14 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
             table.add_row("Gateway URL", result.gateway_url or "—")
             table.add_row("Gateway WS", ws_status)
             table.add_row("Device ID", result.device_id or "—")
+            autostart_display = {
+                "elevated": "[magenta]elevated[/magenta] (Task Scheduler, HIGHEST)",
+                "schtasks": "[blue]schtasks[/blue] (Task Scheduler, LIMITED)",
+                "registry": "[cyan]registry[/cyan] (HKCU Run key)",
+                "skipped": "[dim]skipped[/dim]",
+                "failed": "[red]failed[/red]",
+            }.get(result.autostart_method or "", "[dim]—[/dim]")
+            table.add_row("Autostart", autostart_display)
         table.add_row("HTTP port", str(result.http_port))
         table.add_row("Plugin port", str(result.plugin_port))
         table.add_row("Admin port", str(result.admin_port))

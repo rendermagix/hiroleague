@@ -6,9 +6,14 @@ Safety rules enforced here (in addition to tool-level guards):
   - Restart: a dialog asks whether to also launch the Admin UI on the restarted
     process. If the current workspace is being restarted the option is forced ON
     and read-only (the UI would disappear otherwise).
+  - Setup: available for unconfigured workspaces ("Needs setup" status). Mirrors
+    the options from `phbcli setup` CLI command. Elevated task option is shown on
+    Windows only and triggers a UAC prompt on the server machine.
 """
 
 from __future__ import annotations
+
+import sys
 
 from nicegui import ui
 
@@ -34,6 +39,7 @@ async def workspaces_page() -> None:
     pending_remove: list[dict] = [{}]
     pending_edit: list[dict] = [{}]
     pending_restart: list[dict] = [{}]
+    pending_setup: list[dict] = [{}]
 
     # ------------------------------------------------------------------ create dialog
     with ui.dialog() as create_dialog, ui.card().classes("w-96"):
@@ -164,6 +170,94 @@ async def workspaces_page() -> None:
             ui.button("Cancel", on_click=restart_dialog.close).props("flat")
             ui.button("Restart", on_click=do_restart).props('color="warning"')
 
+    # ------------------------------------------------------------------ setup dialog
+    with ui.dialog() as setup_dialog, ui.card().classes("w-[520px]"):
+        setup_title = ui.label("").classes("text-lg font-semibold mb-1")
+        setup_path_info = ui.label("").classes("text-xs opacity-50 mb-3")
+
+        setup_gateway_input = ui.input(
+            "Gateway WebSocket URL *",
+            placeholder="ws://myhost:8765",
+        ).classes("w-full")
+
+        with ui.expansion("Advanced options", icon="tune").classes("w-full mt-2"):
+            setup_port_input = ui.number(
+                "HTTP port override",
+                placeholder="Leave blank to use auto-assigned port",
+                min=1024,
+                max=65535,
+                precision=0,
+            ).classes("w-full")
+            setup_port_info = ui.label("").classes("text-xs opacity-50 mt-1 mb-2")
+
+            setup_skip_autostart = ui.checkbox(
+                "Skip auto-start registration",
+            ).classes("mt-1")
+            ui.label(
+                "By default, the server is registered to start automatically on login."
+            ).classes("text-xs opacity-50 ml-6 mb-2")
+
+            setup_start_server = ui.checkbox(
+                "Start server immediately after setup",
+            ).classes("mt-1")
+
+            # Elevated task option — only relevant on Windows (UAC prompt on server machine)
+            if sys.platform == "win32":
+                setup_elevated_task = ui.checkbox(
+                    "Request elevated Task Scheduler entry (Windows UAC)",
+                ).classes("mt-1")
+                ui.label(
+                    "Triggers a UAC prompt on the server machine to register the task "
+                    "with highest privileges. Only works if you have physical or RDP "
+                    "access to the server."
+                ).classes("text-xs opacity-50 ml-6 mb-1")
+            else:
+                # Non-Windows: create a dummy checkbox that is never shown/used
+                setup_elevated_task = ui.checkbox("").classes("hidden")
+
+        async def do_setup() -> None:
+            from phbcli.tools.server import SetupTool
+
+            row = pending_setup[0]
+            ws_id = row.get("id", "")
+            ws_name = row.get("name", "")
+
+            gateway = setup_gateway_input.value.strip()
+            if not gateway:
+                ui.notify("Gateway WebSocket URL is required.", color="negative")
+                return
+
+            port_val = setup_port_input.value
+            http_port: int | None = int(port_val) if port_val else None
+
+            try:
+                result = SetupTool().execute(
+                    gateway_url=gateway,
+                    workspace=ws_id,
+                    http_port=http_port,
+                    skip_autostart=setup_skip_autostart.value,
+                    start_server=setup_start_server.value,
+                    elevated_task=setup_elevated_task.value,
+                )
+                msg_parts = [f"Gateway: {result.gateway_url}", f"HTTP port: {result.http_port}"]
+                if result.autostart_registered:
+                    msg_parts.append(f"Autostart: {result.autostart_method}")
+                if result.server_started:
+                    msg_parts.append("Server started")
+                ui.notify(
+                    f"Workspace '{ws_name}' configured. " + "  •  ".join(msg_parts),
+                    color="positive",
+                    timeout=8000,
+                )
+                setup_dialog.close()
+                workspace_list.refresh()
+            except Exception as exc:
+                ui.notify(str(exc), color="negative")
+
+        with ui.row().classes("justify-end gap-2 w-full mt-4"):
+            ui.button("Cancel", on_click=setup_dialog.close).props("flat")
+            ui.button("Run setup", icon="settings", on_click=do_setup)
+
     # ------------------------------------------------------------------ refreshable table
     @ui.refreshable
     def workspace_list() -> None:
@@ -204,9 +298,11 @@ async def workspaces_page() -> None:
             {"name": "name", "label": "Name", "field": "name", "align": "left", "sortable": True},
             {"name": "setup", "label": "Setup", "field": "is_configured", "align": "left"},
             {"name": "status", "label": "Server", "field": "running", "align": "left"},
-            {"name": "gateway_url", "label": "Gateway URL", "field": "gateway_url", "align": "left"},
+            {"name": "autostart", "label": "Autostart", "field": "autostart_method", "align": "left"},
+            {"name": "gateway_url", "label": "Gateway", "field": "gateway_url", "align": "left"},
             {"name": "http_port", "label": "HTTP", "field": "http_port", "align": "left"},
             {"name": "admin_port", "label": "Admin", "field": "admin_port", "align": "left"},
+            {"name": "folder", "label": "Folder", "field": "path", "align": "left"},
             {"name": "is_default", "label": "Default", "field": "is_default", "align": "center"},
             {"name": "actions", "label": "", "field": "name", "align": "right"},
         ]
@@ -236,13 +332,89 @@ async def workspaces_page() -> None:
             """,
         )
         table.add_slot(
+            "body-cell-autostart",
+            """
+            <q-td :props="props">
+                <q-badge v-if="props.row.autostart_method === 'elevated'"
+                         color="deep-purple" label="elevated" />
+                <q-badge v-else-if="props.row.autostart_method === 'schtasks'"
+                         color="primary" label="schtasks" />
+                <q-badge v-else-if="props.row.autostart_method === 'registry'"
+                         color="teal" label="registry" />
+                <q-badge v-else-if="props.row.autostart_method === 'skipped'"
+                         color="grey-6" label="skipped" />
+                <q-badge v-else-if="props.row.autostart_method === 'failed'"
+                         color="negative" label="failed" />
+                <span v-else class="opacity-30 text-xs">—</span>
+            </q-td>
+            """,
+        )
+        table.add_slot(
             "body-cell-gateway_url",
             """
             <q-td :props="props">
-                <span v-if="props.row.gateway_url" class="text-xs font-mono opacity-80">
+                <div v-if="props.row.gateway_url && props.row.running"
+                     class="row items-center gap-1">
+                    <q-icon name="cable" size="xs" color="primary" />
+                    <a :href="props.row.gateway_url.replace(/^ws/, 'http')"
+                       target="_blank"
+                       class="text-xs font-mono text-primary hover:underline cursor-pointer"
+                       :title="props.row.gateway_url">
+                        {{ props.row.gateway_url }}
+                    </a>
+                </div>
+                <span v-else-if="props.row.gateway_url" class="text-xs font-mono opacity-50">
                     {{ props.row.gateway_url }}
                 </span>
                 <span v-else class="opacity-30 text-xs">—</span>
+            </q-td>
+            """,
+        )
+        table.add_slot(
+            "body-cell-http_port",
+            """
+            <q-td :props="props">
+                <div v-if="props.row.running" class="row items-center gap-2">
+                    <a :href="'http://127.0.0.1:' + props.row.http_port + '/status'"
+                       target="_blank"
+                       class="text-primary hover:opacity-70"
+                       :title="'http://127.0.0.1:' + props.row.http_port + '/status'">
+                        <q-icon name="open_in_browser" size="xs" />
+                    </a>
+                </div>
+                <span v-else class="text-xs font-mono opacity-50">
+                    {{ props.row.http_port }}
+                </span>
+            </q-td>
+            """,
+        )
+        table.add_slot(
+            "body-cell-admin_port",
+            """
+            <q-td :props="props">
+                <div v-if="props.row.running" class="row items-center gap-2">
+                    <a :href="'http://127.0.0.1:' + props.row.admin_port + '/'"
+                       target="_blank"
+                       class="text-primary hover:opacity-70"
+                       :title="'Admin UI: http://127.0.0.1:' + props.row.admin_port + '/'">
+                        <q-icon name="dashboard" size="xs" />
+                    </a>
+                </div>
+                <span v-else class="text-xs font-mono opacity-50">
+                    {{ props.row.admin_port }}
+                </span>
+            </q-td>
+            """,
+        )
+        table.add_slot(
+            "body-cell-folder",
+            """
+            <q-td :props="props">
+                <span class="text-xs cursor-pointer text-primary hover:underline"
+                      @click="() => $parent.$emit('open-folder', props.row)"
+                      title="Open workspace folder">
+                    📁
+                </span>
             </q-td>
             """,
         )
@@ -259,6 +431,12 @@ async def workspaces_page() -> None:
             """
             <q-td :props="props">
               <div class="row no-wrap justify-end items-center">
+
+                <!-- Setup: only for unconfigured workspaces -->
+                <q-btn v-if="!props.row.is_configured"
+                       flat size="sm" icon="settings" color="warning"
+                       title="Run setup" class="q-ma-xs"
+                       @click="() => $parent.$emit('setup', props.row)" />
 
                 <!-- Start: only for configured + stopped workspaces -->
                 <q-btn v-if="props.row.is_configured && !props.row.running"
@@ -370,6 +548,45 @@ async def workspaces_page() -> None:
             )
             edit_dialog.open()
 
+        def handle_setup(e) -> None:
+            row = e.args if isinstance(e.args, dict) else {}
+            pending_setup[0] = row
+            ws_name = row.get("name", "")
+            setup_title.set_text(f"Setup workspace '{ws_name}'")
+            setup_path_info.set_text(f"Path: {row.get('path', '')}")
+            # Pre-fill gateway if already partially configured
+            setup_gateway_input.set_value(row.get("gateway_url") or "")
+            setup_port_input.set_value(None)
+            setup_port_info.set_text(
+                f"Auto-assigned HTTP port: {row.get('http_port', 'unknown')}"
+            )
+            setup_skip_autostart.set_value(False)
+            setup_start_server.set_value(False)
+            setup_elevated_task.set_value(False)
+            setup_dialog.open()
+
+        def handle_open_folder(e) -> None:
+            import platform
+            import subprocess
+
+            row = e.args if isinstance(e.args, dict) else {}
+            folder_path = row.get("path", "")
+            if not folder_path:
+                ui.notify("Folder path not available.", color="warning")
+                return
+
+            try:
+                system = platform.system()
+                if system == "Windows":
+                    subprocess.Popen(f'explorer "{folder_path}"')
+                elif system == "Darwin":  # macOS
+                    subprocess.Popen(["open", folder_path])
+                else:  # Linux and others
+                    subprocess.Popen(["xdg-open", folder_path])
+                ui.notify(f"Opening folder: {folder_path}", color="info", timeout=2000)
+            except Exception as exc:
+                ui.notify(f"Could not open folder: {str(exc)}", color="negative")
+
         def handle_remove(e) -> None:
             row = e.args if isinstance(e.args, dict) else {}
             ws_id = row.get("id", "")
@@ -387,6 +604,8 @@ async def workspaces_page() -> None:
             purge_checkbox.set_value(False)
             remove_dialog.open()
 
+        table.on("setup", handle_setup)
+        table.on("open-folder", handle_open_folder)
         table.on("start", handle_start)
         table.on("stop", handle_stop)
         table.on("restart", handle_restart)

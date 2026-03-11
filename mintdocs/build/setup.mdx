@@ -3,16 +3,44 @@ title: "Setup"
 description: "Set up your local development environment for Private Home Box."
 ---
 
-## PHBServer / phbcli
+## PHBServer (phbcli + phbgateway)
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) — the Python package and project manager used by the server.
 
-After cloning, install all Python dependencies (including `langgraph-checkpoint-sqlite`):
+### First-time setup
+
+After cloning, run from the repo root:
 
 ```bash
 cd phbserver
 uv sync
+uv tool install --editable phbcli
 ```
+
+`uv sync` installs all workspace dependencies (shared by both `phbcli` and `phbgateway`). `uv tool install --editable phbcli` installs both the `phbcli` and `phb-channel-devices` binaries — the mandatory channel is declared as a script in `phbcli`'s `pyproject.toml`, so a single tool install covers both.
+
+`phbgateway` does not need a separate tool install — it runs directly from the workspace via `uv run phbgateway`.
+
+### After pulling updated code
+
+Use the helper script at the repo root — run this every time you pull changes or switch environments:
+
+```bash
+./dev-sync.sh
+```
+
+It runs the following steps:
+
+```bash
+phbcli stop          # release Windows file lock on the binary before overwriting
+cd phbserver
+uv sync
+uv tool install --editable phbcli --upgrade --force
+```
+
+<Warning>
+`uv sync` alone is **not enough** after code changes. `phbcli` is a `uv tool` — its entry-point scripts are baked at install time. If `pyproject.toml` or the package structure changes, the old script will point at a stale or missing module and fail with `ModuleNotFoundError`. Always run `./dev-sync.sh` after pulling. On Windows the server must be stopped first so the binary file lock is released.
+</Warning>
 
 ## Mobile / web app
 

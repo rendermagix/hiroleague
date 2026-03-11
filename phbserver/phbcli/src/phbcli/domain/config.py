@@ -55,6 +55,9 @@ class Config(BaseModel):
     attestation_expires_days: int = DEFAULT_ATTESTATION_EXPIRY_DAYS
     log_dir: str = ""
     log_levels: dict[str, str] = Field(default_factory=dict)
+    # Set by setup; used by teardown to pick the correct removal path without user input.
+    # Values: "elevated" | "schtasks" | "registry" | "skipped" | "failed" | None
+    autostart_method: str | None = None
 
 
 class State(BaseModel):
