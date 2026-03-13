@@ -20,5 +20,6 @@ abstract class AuthRepository {
   Future<DeviceIdentity> pairDevice({
     required String gatewayUrl,
     required String pairingCode,
+    String? deviceName,
   });
 }

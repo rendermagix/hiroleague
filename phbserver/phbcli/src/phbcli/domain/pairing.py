@@ -58,6 +58,7 @@ class ApprovedDevice(BaseModel):
     paired_at: datetime
     expires_at: datetime | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    device_name: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +145,7 @@ def load_approved_devices(workspace_path: Path) -> list[ApprovedDevice]:
                             else None
                         ),
                         metadata=json.loads(row["metadata"] or "{}"),
+                        device_name=row["device_name"] or None,
                     )
                 )
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
@@ -163,8 +165,8 @@ def save_approved_devices(workspace_path: Path, devices: list[ApprovedDevice]) -
         for device in devices:
             conn.execute(
                 """
-                INSERT INTO devices (device_id, device_public_key, paired_at, expires_at, metadata)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO devices (device_id, device_public_key, paired_at, expires_at, metadata, device_name)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     device.device_id,
@@ -172,6 +174,7 @@ def save_approved_devices(workspace_path: Path, devices: list[ApprovedDevice]) -
                     utc_iso(device.paired_at),
                     utc_iso(device.expires_at) if device.expires_at else None,
                     json.dumps(device.metadata),
+                    device.device_name,
                 ),
             )
         conn.commit()
@@ -183,13 +186,14 @@ def upsert_approved_device(workspace_path: Path, device: ApprovedDevice) -> None
     with sqlite3.connect(str(db_path(workspace_path))) as conn:
         conn.execute(
             """
-            INSERT INTO devices (device_id, device_public_key, paired_at, expires_at, metadata)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO devices (device_id, device_public_key, paired_at, expires_at, metadata, device_name)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(device_id) DO UPDATE SET
                 device_public_key = excluded.device_public_key,
                 paired_at         = excluded.paired_at,
                 expires_at        = excluded.expires_at,
-                metadata          = excluded.metadata
+                metadata          = excluded.metadata,
+                device_name       = excluded.device_name
             """,
             (
                 device.device_id,
@@ -197,6 +201,7 @@ def upsert_approved_device(workspace_path: Path, device: ApprovedDevice) -> None
                 utc_iso(device.paired_at),
                 utc_iso(device.expires_at) if device.expires_at else None,
                 json.dumps(device.metadata),
+                device.device_name,
             ),
         )
         conn.commit()

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +29,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _gatewayUrlController = TextEditingController();
   final _pairingCodeController = TextEditingController();
+  final _deviceNameController = TextEditingController();
 
   PairingObject? _parsedPairing;
   Timer? _expiryTimer;
@@ -34,11 +37,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _showQrButton = PlatformUtils.isMobile;
 
   @override
+  void initState() {
+    super.initState();
+    _loadDeviceName();
+  }
+
+  @override
   void dispose() {
     _gatewayUrlController.dispose();
     _pairingCodeController.dispose();
+    _deviceNameController.dispose();
     _expiryTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadDeviceName() async {
+    // kIsWeb has no meaningful device name; skip auto-population on web.
+    if (kIsWeb) return;
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      String name = '';
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final info = await deviceInfo.iosInfo;
+        // iosInfo.name is the user-assigned device name from Settings.
+        name = info.name;
+      } else if (defaultTargetPlatform == TargetPlatform.android) {
+        final info = await deviceInfo.androidInfo;
+        name = info.model;
+      }
+      if (mounted && name.isNotEmpty) {
+        _deviceNameController.text = name;
+      }
+    } catch (_) {
+      // Device name is optional; silently ignore if unavailable.
+    }
   }
 
   // ── Pairing object helpers ───────────────────────────────────────────────
@@ -97,9 +129,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _connect() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final nameRaw = _deviceNameController.text.trim();
     await ref.read(authProvider.notifier).pair(
           _gatewayUrlController.text.trim(),
           _pairingCodeController.text.trim(),
+          deviceName: nameRaw.isEmpty ? null : nameRaw,
         );
   }
 
@@ -137,6 +171,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        TextFormField(
+                          controller: _deviceNameController,
+                          enabled: !isPairing,
+                          decoration: const InputDecoration(
+                            labelText: 'Device Name',
+                            hintText: 'Name shown in the admin device list',
+                            prefixIcon: Icon(Icons.smartphone_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLength: 64,
+                          buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                        ),
+                        const SizedBox(height: 16),
                         GatewayUrlField(
                           controller: _gatewayUrlController,
                           enabled: !isPairing,

@@ -270,16 +270,18 @@ async def _forward_pairing_request(ws: ServerConnection, msg: dict[str, object])
     async with _pairing_lock:
         _pairing_pending[request_id] = ws
 
-    await desktop_ws.send(
-        json.dumps(
-            {
-                "type": "pairing_request",
-                "request_id": request_id,
-                "pairing_code": pairing_code,
-                "device_public_key": device_public_key,
-            }
-        )
-    )
+    # Forward device_name if provided — used for admin UI device list labelling.
+    device_name = msg.get("device_name")
+    forward_payload: dict[str, object] = {
+        "type": "pairing_request",
+        "request_id": request_id,
+        "pairing_code": pairing_code,
+        "device_public_key": device_public_key,
+    }
+    if isinstance(device_name, str) and device_name:
+        forward_payload["device_name"] = device_name
+
+    await desktop_ws.send(json.dumps(forward_payload))
     await ws.send(json.dumps({"type": "pairing_pending", "request_id": request_id}))
 
     try:

@@ -11,7 +11,8 @@ SecureStorageService secureStorageService(Ref ref) =>
 class SecureStorageService {
   SecureStorageService()
       : _storage = const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
+          // encryptedSharedPreferences deprecated in v10; new default uses RSA OAEP + AES-GCM.
+          aOptions: AndroidOptions(),
           iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
         );
 

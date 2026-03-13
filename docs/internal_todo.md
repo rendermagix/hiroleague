@@ -1,8 +1,6 @@
 
 # Priority
-- Admin/Mobile/Web - Pair using QR Code
 - add Device Name in Device Paring.
-- Fix Flutter Package Versions.
 - Clean up Message Format
 - Add ability to send Commands.
 - Allow creating channels/conversations.
@@ -10,7 +8,7 @@
 - Admin UI - Revoke Devices
 
 # Flutter App/Web
-- Upgrade Flutter Packages to latest!
+- Upgrade Flutter Packages to latest! Waiting for riverpod_generator to support analyzer ^10, in order to update sqlite3 and many other packages.
 - Biometric/Pass/Pattern Lock
 - Add ability to send Voice, Image.
 - Add ability to respond in Voice.
@@ -147,6 +145,8 @@
 - Admin UI - Add Device QR Code
 - Admin UI - Allow Loading Local Gateways
 - when adding a workspace in admin ui, show public key ONCE.
+- Admin/Mobile/Web - Pair using QR Code
+- Fix Flutter Package Versions.
 
 
 # Quick Links

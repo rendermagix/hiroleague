@@ -125,6 +125,9 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
             request_id = data.get("request_id")
             pairing_code = data.get("pairing_code")
             device_public_key = data.get("device_public_key")
+            device_name_raw = data.get("device_name")
+            # device_name is optional; coerce to str or None.
+            device_name = device_name_raw if isinstance(device_name_raw, str) and device_name_raw else None
             if not isinstance(request_id, str) or not request_id:
                 return
             if not isinstance(pairing_code, str) or not pairing_code:
@@ -183,6 +186,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
                     paired_at=datetime.now(UTC),
                     expires_at=expires_at,
                     metadata={"source": "gateway_pairing"},
+                    device_name=device_name,
                 ),
             )
             clear_pairing_session(workspace_path)

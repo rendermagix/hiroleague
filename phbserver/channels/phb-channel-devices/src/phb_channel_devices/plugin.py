@@ -259,15 +259,18 @@ class DevicesChannel(ChannelPlugin):
             log.warning("Pairing request missing device_public_key")
             return
 
+        device_name_raw = msg.get("device_name")
+        device_name = device_name_raw if isinstance(device_name_raw, str) and device_name_raw else None
+
         log.info("Pairing request received", request_id=request_id)
-        await self.emit_event(
-            "pairing_request",
-            {
-                "request_id": request_id,
-                "pairing_code": pairing_code,
-                "device_public_key": device_public_key,
-            },
-        )
+        event_data: dict[str, object] = {
+            "request_id": request_id,
+            "pairing_code": pairing_code,
+            "device_public_key": device_public_key,
+        }
+        if device_name:
+            event_data["device_name"] = device_name
+        await self.emit_event("pairing_request", event_data)
 
     async def on_event(self, event: str, data: dict) -> None:
         if event != "pairing_response":

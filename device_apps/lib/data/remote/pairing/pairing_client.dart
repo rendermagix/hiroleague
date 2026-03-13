@@ -32,6 +32,7 @@ class PairingClient {
     required String seedBase64,
     required String publicKeyBase64,
     required String pairingCode,
+    String? deviceName,
   }) async {
     _log.info('Starting pairing', fields: {'url': gatewayUrl});
 
@@ -57,15 +58,18 @@ class PairingClient {
 
       // 2 — Sign the nonce and send pairing_request
       final nonceSignature = await _cryptoService.signNonce(seedBase64, nonce);
-      channel.sink.add(
-        jsonEncode(<String, dynamic>{
-          'type': 'pairing_request',
-          'pairing_code': pairingCode,
-          'device_public_key': publicKeyBase64,
-          'device_id': deviceId,
-          'nonce_signature': nonceSignature,
-        }),
-      );
+      final pairingRequest = <String, dynamic>{
+        'type': 'pairing_request',
+        'pairing_code': pairingCode,
+        'device_public_key': publicKeyBase64,
+        'device_id': deviceId,
+        'nonce_signature': nonceSignature,
+      };
+      // Include device_name so the server can label the device in the admin UI.
+      if (deviceName != null && deviceName.isNotEmpty) {
+        pairingRequest['device_name'] = deviceName;
+      }
+      channel.sink.add(jsonEncode(pairingRequest));
       _log.debug('Sent pairing_request');
 
       // 3 — Wait for pairing_response (ignore pairing_pending)

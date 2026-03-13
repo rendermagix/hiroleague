@@ -203,7 +203,7 @@ dependencies:
 
   # Local DB
   drift: ^2.x
-  sqlite3_flutter_libs: ^0.x
+  drift_flutter: ^0.x  # bundles sqlite3 3.x natively; sqlite3_flutter_libs is no longer needed
 
   # Theming
   flex_color_scheme: ^8.x
@@ -305,20 +305,6 @@ Issues discovered during the Riverpod v2 → v3 / freezed v2 → v3 upgrade.
 ```yaml
 drift: ">=2.28.1 <2.32.0"
 drift_dev: ">=2.28.1 <2.32.0"
-```
-
-</Accordion>
-
-<Accordion title="flutter pub get reports false SDK incompatibilities (e.g. flex_color_scheme requires Flutter >=3.38.0)">
-
-Running `flutter pub get` (without `fvm`) resolves against the globally installed Flutter SDK, which may be an older version. This produces false incompatibility errors even when the FVM-pinned version satisfies the constraint.
-
-**Fix:** always prefix Flutter commands with `fvm`:
-
-```bash
-fvm flutter pub get
-fvm flutter pub upgrade
-fvm flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
 </Accordion>

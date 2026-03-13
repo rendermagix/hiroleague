@@ -66,12 +66,14 @@ def register(device_app: typer.Typer, console: Console) -> None:
             return
 
         table = Table(title="Approved devices", show_header=True)
-        table.add_column("Device ID", style="bold")
+        table.add_column("Name", style="bold")
+        table.add_column("Device ID")
         table.add_column("Paired At")
         table.add_column("Expires At")
 
         for device in result.devices:
             table.add_row(
+                device.get("device_name") or "—",
                 device["device_id"],
                 device["paired_at"],
                 device["expires_at"] or "—",

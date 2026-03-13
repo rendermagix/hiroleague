@@ -26,45 +26,44 @@ uv tool install --editable phbcli --upgrade --force
 `uv sync` alone is **not enough** after code changes. `phbcli` is a `uv tool` — its entry-point scripts are baked at install time. If `pyproject.toml` or the package structure changes, the old script will point at a stale or missing module and fail with `ModuleNotFoundError`. Always run `./dev-sync.sh` after pulling. On Windows the server must be stopped first so the binary file lock is released.
 </Warning>
 
-## Flutter — code generation
+## Flutter — dev task runner (`dev.sh`)
 
-Several packages (`freezed`, `json_serializable`, `riverpod_generator`, `drift`) require a code generation step. Run this from `device_apps/` any time you add or modify a model, provider, or database table:
-
-```bash
-fvm dart run build_runner build --delete-conflicting-outputs
-```
-
-During active development, use watch mode so code is regenerated automatically on file save:
-
-```bash
-fvm dart run build_runner watch --delete-conflicting-outputs
-```
-
-<Note>
-Always run `build_runner build` once after `fvm flutter pub get` on a fresh clone, before attempting any build or run command.
-</Note>
-
-## Flutter — run for development
+`device_apps/dev.sh` is the primary entry point for all Flutter build and maintenance tasks. It verifies the pinned Flutter version (from `.fvmrc`) before running anything.
 
 ```bash
 cd device_apps
-fvm flutter run
+
+./dev.sh --outdated          # list packages with newer versions available
+./dev.sh --codegen           # run build_runner (freezed / riverpod / drift)
+./dev.sh --web               # build Flutter web  →  build/web/
+./dev.sh --android           # build APK for arm64-v8a  →  build/app/outputs/flutter-apk/
+./dev.sh --all               # codegen + web + android in sequence
+./dev.sh --codegen --android # combine any flags
 ```
 
-Add `-d <device-id>` to target a specific device or emulator. Use `fvm flutter devices` to list available targets.
+All of these are also available as named launch configurations in VS Code / Cursor (Run & Debug panel).
+
+## Flutter — run for development
+
+For interactive development (hot reload), use `flutter_build.sh` directly:
+
+```bash
+cd device_apps
+./flutter_build.sh run
+```
+
+Add `-d <device-id>` to target a specific device or emulator. Use `./flutter_build.sh devices` to list available targets.
 
 ## Flutter — build for web
 
-From `device_apps/`:
-
 ```bash
-fvm flutter build web
+./dev.sh --web
 ```
 
 Output is written to `build/web/`. To host under a sub-path (e.g. `/app/`):
 
 ```bash
-fvm flutter build web --base-href /app/
+./flutter_build.sh build web --base-href /app/
 ```
 
 <Note>
@@ -73,20 +72,33 @@ You may see Wasm dry-run warnings about `flutter_secure_storage_web` using `dart
 
 ## Flutter — build for Android
 
-From `device_apps/`:
-
 ```bash
-# Debug APK — quickest for local testing
-fvm flutter build apk
-
-# Split APKs per ABI — smaller files, suitable for direct device install
-fvm flutter build apk --split-per-abi
-
-# Release App Bundle — required for Google Play upload
-fvm flutter build appbundle --release
+./dev.sh --android
 ```
 
-Output APKs are written to `build/app/outputs/flutter-apk/`.
+Builds a single APK targeting `android-arm64` (arm64-v8a) — the correct ABI for modern 64-bit Android devices. Output is written to `build/app/outputs/flutter-apk/`.
+
+For a Google Play release bundle or a split-ABI build:
+
+```bash
+# All ABIs split — smaller per-ABI files for direct device install
+./flutter_build.sh build apk --split-per-abi
+
+# Release App Bundle — required for Google Play upload
+./flutter_build.sh build appbundle --release
+```
+
+## Flutter — code generation (standalone)
+
+During active development, use watch mode so code is regenerated automatically on file save:
+
+```bash
+dart run build_runner watch --delete-conflicting-outputs
+```
+
+<Note>
+Always run `./dev.sh --codegen` once after `flutter pub get` on a fresh clone, before attempting any build or run command.
+</Note>
 
 <Note>
 `android/gradle.properties` sets `kotlin.incremental=false`. This is required when the Flutter Pub cache (`C:\Users\...\AppData\Local\Pub\Cache`) and the project (`D:\...`) are on different Windows drives — the Kotlin incremental compiler cannot compute relative paths across drive letters and fails the build otherwise.
@@ -101,7 +113,7 @@ Output APKs are written to `build/app/outputs/flutter-apk/`.
     The generated source files do not exist yet. Run code generation first, then retry the build:
 
     ```bash
-    fvm dart run build_runner build --delete-conflicting-outputs
+    dart run build_runner build --delete-conflicting-outputs
     ```
 
     This must be run at least once after a fresh clone and any time you add a new `@freezed` model or `@riverpod` provider.
@@ -116,15 +128,15 @@ Output APKs are written to `build/app/outputs/flutter-apk/`.
     kotlin.incremental=false
     ```
 
-    If you have removed it or are starting from a different branch, add it back and run `fvm flutter clean` before retrying.
+    If you have removed it or are starting from a different branch, add it back and run `flutter clean` before retrying.
   </Accordion>
 
   <Accordion title="Android build fails with 'Daemon compilation failed: null' and a long Kotlin stack trace">
     This is a symptom of the same cross-drive Kotlin incremental cache issue described above. Check that `kotlin.incremental=false` is set in `android/gradle.properties`, then clean and rebuild:
 
     ```bash
-    fvm flutter clean
-    fvm flutter build apk
+    flutter clean
+    ./flutter_build.sh build apk --target-platform android-arm64
     ```
   </Accordion>
 
@@ -142,12 +154,12 @@ Output APKs are written to `build/app/outputs/flutter-apk/`.
     On Windows, stop the server first (`phbcli stop`) so the binary file lock is released before the reinstall.
   </Accordion>
 
-  <Accordion title="fvm flutter run picks up stale generated code after adding a new model">
+  <Accordion title="flutter run picks up stale generated code after adding a new model">
     Hot reload does not trigger code generation. After adding a new `@freezed` model or `@riverpod` provider, stop the app, run `build_runner build`, then restart:
 
     ```bash
-    fvm dart run build_runner build --delete-conflicting-outputs
-    fvm flutter run
+    dart run build_runner build --delete-conflicting-outputs
+    flutter run
     ```
   </Accordion>
 </AccordionGroup>

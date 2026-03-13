@@ -45,8 +45,9 @@ async def devices_page() -> None:
             pairing_gateway_label = ui.label("").classes("text-xs font-mono opacity-60")
 
         # Copy full QR message (JSON payload) for pasting into the Flutter app
+        # ui.clipboard.write() returns None in this NiceGUI version — do not await it.
         async def _copy_qr_payload() -> None:
-            await ui.clipboard.write(pending_qr_payload[0])
+            ui.clipboard.write(pending_qr_payload[0])
             ui.notify("Pairing message copied to clipboard.", color="positive", timeout=2500)
 
         ui.button(
@@ -107,6 +108,7 @@ async def devices_page() -> None:
             return
 
         columns = [
+            {"name": "device_name", "label": "Name", "field": "device_name", "align": "left"},
             {"name": "device_id", "label": "Device ID", "field": "device_id", "align": "left"},
             {"name": "paired_at", "label": "Paired", "field": "paired_at", "align": "left"},
             {"name": "expires_at", "label": "Expires", "field": "expires_at", "align": "left"},
@@ -114,6 +116,15 @@ async def devices_page() -> None:
         ]
 
         table = ui.table(columns=columns, rows=devices, row_key="device_id").classes("w-full")
+        table.add_slot(
+            "body-cell-device_name",
+            """
+            <q-td :props="props">
+                <span v-if="props.row.device_name" class="font-medium">{{ props.row.device_name }}</span>
+                <span v-else class="opacity-40">—</span>
+            </q-td>
+            """,
+        )
         table.add_slot(
             "body-cell-expires_at",
             """
@@ -136,8 +147,12 @@ async def devices_page() -> None:
             row = e.args if isinstance(e.args, dict) else {}
             device_id = row.get("device_id", "")
             pending_revoke_id[0] = device_id
-            short_id = device_id[:12] + "…" if len(device_id) > 12 else device_id
-            revoke_title.set_text(f"Revoke device '{short_id}'?")
+            # Show device name in the confirmation dialog if available.
+            display_name = row.get("device_name") or None
+            if not display_name:
+                short_id = device_id[:12] + "…" if len(device_id) > 12 else device_id
+                display_name = short_id
+            revoke_title.set_text(f"Revoke '{display_name}'?")
             revoke_dialog.open()
 
         table.on("revoke", handle_revoke)

@@ -78,7 +78,8 @@ _DDL = [
         device_public_key  TEXT NOT NULL,
         paired_at          TEXT NOT NULL,
         expires_at         TEXT,
-        metadata           TEXT NOT NULL DEFAULT '{}'
+        metadata           TEXT NOT NULL DEFAULT '{}',
+        device_name        TEXT
     )
     """,
     """
@@ -126,6 +127,7 @@ _EXPECTED_COLUMNS: list[tuple[str, str, str]] = [
     ("devices", "paired_at",         "TEXT NOT NULL DEFAULT ''"),
     ("devices", "expires_at",        "TEXT"),
     ("devices", "metadata",          "TEXT NOT NULL DEFAULT '{}'"),
+    ("devices", "device_name",       "TEXT"),
     # channel_plugins
     ("channel_plugins", "enabled",       "INTEGER NOT NULL DEFAULT 1"),
     ("channel_plugins", "command",       "TEXT NOT NULL DEFAULT '[]'"),

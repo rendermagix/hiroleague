@@ -19,13 +19,14 @@ class AuthNotifier extends _$AuthNotifier {
   }
 
   /// Initiates the pairing handshake.
-  Future<void> pair(String gatewayUrl, String pairingCode) async {
+  Future<void> pair(String gatewayUrl, String pairingCode, {String? deviceName}) async {
     state = const AsyncData(AuthState.pairing());
     try {
       final repo = ref.read(authRepositoryProvider);
       final identity = await repo.pairDevice(
         gatewayUrl: gatewayUrl,
         pairingCode: pairingCode,
+        deviceName: deviceName,
       );
       state = AsyncData(AuthState.authenticated(identity));
     } on AppException catch (e) {

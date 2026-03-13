@@ -25,27 +25,7 @@ uv tool install --editable phbcli
 
 Install [Flutter](https://docs.flutter.dev/install/quick).
 
-Then install [FVM](https://fvm.app) (Flutter Version Manager) to use the exact Flutter version pinned in the repo:
-
-```bash
-dart pub global activate fvm
-```
-
-On **Windows (Git Bash)**, add the following to `~/.bashrc`:
-
-```bash
-export PATH="$PATH:/c/Users/<YOU>/AppData/Local/Pub/Cache/bin"
-alias fvm='fvm.bat'
-```
-
-On **Windows**, also enable **Developer Mode** (Settings → System → For developers) so FVM can create the symlinks it needs.
-
-Once inside the `device_apps` folder, install the pinned Flutter version:
-
-```bash
-cd device_apps
-fvm install
-```
+The repo pins a specific Flutter version in `device_apps/.fvmrc`. Install exactly that version — the [Flutter releases archive](https://docs.flutter.dev/release/archive) lists all stable builds. The `device_apps/flutter_build.sh` script checks your installed version before every build and aborts with a clear message if it does not match.
 
 ## Documentation (optional)
 
@@ -77,28 +57,8 @@ See [Diagram generator](/build/diagram-generator) for authoring and workflow det
     `uv` was not installed or is not on your PATH. Install it from [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/) and restart your terminal.
   </Accordion>
 
-  <Accordion title="fvm: command not found in Git Bash on Windows">
-    After running `dart pub global activate fvm`, the `fvm.bat` binary lands in the Dart pub cache bin directory which is not on the Git Bash PATH by default. Add the following two lines to `~/.bashrc` and restart your terminal:
-
-    ```bash
-    export PATH="$PATH:/c/Users/<YOU>/AppData/Local/Pub/Cache/bin"
-    alias fvm='fvm.bat'
-    ```
-
-    Replace `<YOU>` with your Windows username.
-  </Accordion>
-
-  <Accordion title="fvm install fails with a permission or symlink error on Windows">
-    FVM needs to create directory symlinks, which requires **Developer Mode** on Windows. Go to **Settings → System → For developers** and enable it, then re-run `fvm install`.
-  </Accordion>
-
-  <Accordion title="fvm install reports no Flutter version is pinned">
-    There is no `.fvm/fvm_config.json` in `device_apps/` yet. Run the following inside `device_apps/` to pin the version first, then install:
-
-    ```bash
-    fvm use <version>   # e.g. fvm use 3.41.4
-    fvm install
-    ```
+  <Accordion title="flutter_build.sh: version mismatch error">
+    The installed Flutter version does not match the version pinned in `device_apps/.fvmrc`. Download the exact required version from the [Flutter releases archive](https://docs.flutter.dev/release/archive) and point your PATH to it, or run `flutter upgrade` if the required version is newer than what you have.
   </Accordion>
 
   <Accordion title="uv sync installs dependencies but phbcli command is still not found">

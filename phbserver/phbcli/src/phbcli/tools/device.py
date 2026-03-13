@@ -106,6 +106,7 @@ class DeviceListTool(Tool):
             devices=[
                 {
                     "device_id": d.device_id,
+                    "device_name": d.device_name,
                     "paired_at": d.paired_at.isoformat().replace("+00:00", "Z"),
                     "expires_at": (
                         d.expires_at.isoformat().replace("+00:00", "Z")

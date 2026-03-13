@@ -67,6 +67,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<DeviceIdentity> pairDevice({
     required String gatewayUrl,
     required String pairingCode,
+    String? deviceName,
   }) async {
     // Generate or reuse keypair.
     // On first pairing, we always generate a fresh keypair.
@@ -74,8 +75,12 @@ class AuthRepositoryImpl implements AuthRepository {
     DeviceIdentity unpaired;
     final existing = await loadIdentity();
     if (existing != null && existing.attestation == null) {
-      // Reuse the unpaired identity from a previous failed attempt
-      unpaired = existing.copyWith(gatewayUrl: gatewayUrl);
+      // Reuse the unpaired identity from a previous failed attempt, but update
+      // the device name if a new one was provided.
+      unpaired = existing.copyWith(
+        gatewayUrl: gatewayUrl,
+        deviceName: deviceName ?? existing.deviceName,
+      );
     } else {
       final keypair = await _cryptoService.generateKeypair();
       unpaired = DeviceIdentity(
@@ -83,6 +88,7 @@ class AuthRepositoryImpl implements AuthRepository {
         seedBase64: keypair.seedBase64,
         publicKeyBase64: keypair.publicKeyBase64,
         gatewayUrl: gatewayUrl,
+        deviceName: deviceName,
       );
     }
 
@@ -95,6 +101,7 @@ class AuthRepositoryImpl implements AuthRepository {
       seedBase64: unpaired.seedBase64,
       publicKeyBase64: unpaired.publicKeyBase64,
       pairingCode: pairingCode,
+      deviceName: unpaired.deviceName,
     );
 
     final paired = unpaired.copyWith(attestation: attestation);

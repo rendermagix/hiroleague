@@ -19,6 +19,8 @@ abstract class DeviceIdentity with _$DeviceIdentity {
     DeviceAttestation? attestation,
     // Set by the server on pairing approval; may be null if not provided.
     String? desktopDeviceId,
+    // Human-readable name shown in the admin device list.
+    String? deviceName,
   }) = _DeviceIdentity;
 
   factory DeviceIdentity.fromJson(Map<String, dynamic> json) =>
