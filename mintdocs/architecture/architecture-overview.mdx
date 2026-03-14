@@ -16,11 +16,11 @@ The Root Node is your desktop machine — the central computer running Hiro Leag
 
 Every workspace runs as a separate server process on the Root Node. Device nodes connect to it through a Gateway; the Root Node never connects outward to them.
 
-### Server (PHBCLI)
+### Server (Hirocli)
 
-`phbcli` is the command-line interface used to create, configure, and run workspaces. The same operations available through the CLI are also exposed as HTTP endpoints and as tools the AI agent can invoke — all sharing a single unified tool interface.
+`hirocli` is the command-line interface used to create, configure, and run workspaces. The same operations available through the CLI are also exposed as HTTP endpoints and as tools the AI agent can invoke — all sharing a single unified tool interface.
 
-When you start a workspace, `phbcli` launches a server process that runs all workspace components concurrently.
+When you start a workspace, `hirocli` launches a server process that runs all workspace components concurrently.
 
 ### Device nodes
 
@@ -165,7 +165,7 @@ graph LR
   <Card title="Agent Manager" icon="robot" href="/architecture/agent-manager">
     LLM worker, conversation memory, and available tools.
   </Card>
-  <Card title="Gateway instances" icon="shield" href="/phb/gateway-instances">
+  <Card title="Gateway instances" icon="shield" href="/hiro/gateway-instances">
     Local vs VPS gateway configuration and device authentication.
   </Card>
   <Card title="Tools architecture" icon="wrench" href="/architecture/tools-architecture">

@@ -1,0 +1,52 @@
+---
+title: "Quickstart"
+description: "Get Hiro League running from scratch."
+icon: "rocket"
+---
+
+## 1. Install the server
+
+The server runs on your desktop (Root Node) and is managed through `hirocli`.
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then install `hirocli`:
+
+```bash
+uv tool install hirocli
+```
+
+Initialize a workspace and start the server:
+
+```bash
+hirocli setup --workspace home
+```
+
+See [Setup and uninstall](/hiro/setup-and-uninstall) for all setup options.
+
+## 2. Install the gateway
+
+The gateway handles authentication and routes traffic between your devices and the server.
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then install `hirogateway`:
+
+```bash
+uv tool install hirogateway
+```
+
+Create and start a gateway instance:
+
+```bash
+hirogateway instance create home --host 0.0.0.0 --port 8765 --desktop-pubkey "<base64-public-key>" --set-default
+hirogateway start
+```
+
+See [Gateway CLI commands](/hiro/gateway-cli) for the full setup flow.
+
+## 3. Install the mobile or web app
+
+Install [Flutter](https://docs.flutter.dev/install/quick), then build and run the app:
+
+```bash
+flutter run
+```
+
+Once the app is running, pair your device through the app to connect it to your workspace.

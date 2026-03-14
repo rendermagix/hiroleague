@@ -1,5 +1,5 @@
 abstract final class AppConstants {
-  static const String appName = 'Private Home Box';
+  static const String appName = 'Hiro';
   static const String appVersion = '0.1.0';
 
   // Layout
@@ -12,8 +12,8 @@ abstract final class AppConstants {
   static const Duration reconnectMaxDelay = Duration(seconds: 30);
   static const Duration heartbeatInterval = Duration(seconds: 30);
 
-  // Messaging — wire format (must match phbcli UnifiedMessage schema)
-  /// Transport channel name registered on phbcli.
+  // Messaging — wire format (must match hirocli UnifiedMessage schema)
+  /// Transport channel name registered on hirocli.
   static const String gatewayChannelName = 'devices';
 
   // Local channel IDs (client-side only, not known to the server)

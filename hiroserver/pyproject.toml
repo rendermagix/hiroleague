@@ -1,0 +1,5 @@
+[tool.uv.workspace]
+members = ["hirocli", "gateway", "hiro-channel-sdk", "hiro-commons", "channels/*"]
+
+[dependency-groups]
+dev = ["debugpy>=1.8,<2"]

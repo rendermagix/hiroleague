@@ -3,7 +3,7 @@ graph TD
     WS["Start local<br/>WebSocket server"]
     SPAWN["_spawn_channels()<br/>for each enabled channel"]
     KILL["Kill stale PID<br/>from previous run"]
-    PROC["subprocess.Popen()<br/>channel command + --phb-ws"]
+    PROC["subprocess.Popen()<br/>channel command + --hiro-ws"]
     PID["Write PID to disk"]
     WAIT["Wait for stop_event"]
     STOP["Send channel.stop<br/>to all plugins"]

@@ -14,11 +14,11 @@ Pages are organized by tab, one folder per tab:
 
 | Folder | Tab | Contents |
 |---|---|---|
-| `phb/` | Hiro League | CLI and Gateway reference pages |
+| `hiro/` | Hiro League | CLI and Gateway reference pages |
 | `architecture/` | Architecture | Architecture overview and design pages |
 | `build/` | Build & Contribute | Design decisions, local build setup, contribution guides |
 
-When creating a new page, place it in the folder that matches its tab. When linking to a page, always use the full root-relative path including the folder: `/phb/gateway-instances`, `/architecture/tools-architecture`.
+When creating a new page, place it in the folder that matches its tab. When linking to a page, always use the full root-relative path including the folder: `/hiro/gateway-instances`, `/architecture/tools-architecture`.
 
 ## Terminology
 

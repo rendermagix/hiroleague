@@ -1,0 +1,79 @@
+"""Hiro shared constants.
+
+Consumers may import either by submodule for namespaced access:
+
+    from hiro_commons.constants import network, timing, storage, domain
+    network.DEFAULT_GATEWAY_PORT
+
+or flat from this package:
+
+    from hiro_commons.constants import DEFAULT_GATEWAY_PORT
+"""
+
+from __future__ import annotations
+
+from .domain import (
+    DEFAULT_ATTESTATION_EXPIRY_DAYS,
+    DEFAULT_PAIRING_CODE_LENGTH,
+    DEFAULT_PAIRING_CODE_TTL_SECONDS,
+    DEFAULT_WORKSPACE_NAME,
+    MANDATORY_CHANNEL_NAME,
+    NONCE_BYTE_LENGTH,
+)
+from .network import (
+    DEFAULT_GATEWAY_HOST,
+    DEFAULT_GATEWAY_PORT,
+    DEFAULT_LOCALHOST,
+    PORT_OFFSET_HTTP,
+    PORT_OFFSET_PLUGIN,
+    PORT_RANGE_START,
+    PORTS_PER_SLOT,
+)
+from .storage import (
+    CONFIG_FILENAME,
+    CONVERSATIONS_DIR,
+    LOGS_DIR,
+    MASTER_KEY_FILENAME,
+    PAIRING_SESSION_FILENAME,
+    REGISTRY_FILENAME,
+    WORKSPACE_DB_FILENAME,
+)
+from .timing import (
+    DEFAULT_AUTH_TIMEOUT_SECONDS,
+    DEFAULT_PAIRING_WAIT_SECONDS,
+    DEFAULT_PING_INTERVAL_SECONDS,
+    LOG_ROTATION_BACKUP_COUNT,
+    LOG_ROTATION_MAX_BYTES,
+)
+
+__all__ = [
+    # domain
+    "DEFAULT_ATTESTATION_EXPIRY_DAYS",
+    "DEFAULT_PAIRING_CODE_LENGTH",
+    "DEFAULT_PAIRING_CODE_TTL_SECONDS",
+    "DEFAULT_WORKSPACE_NAME",
+    "MANDATORY_CHANNEL_NAME",
+    "NONCE_BYTE_LENGTH",
+    # network
+    "DEFAULT_GATEWAY_HOST",
+    "DEFAULT_GATEWAY_PORT",
+    "DEFAULT_LOCALHOST",
+    "PORT_OFFSET_HTTP",
+    "PORT_OFFSET_PLUGIN",
+    "PORT_RANGE_START",
+    "PORTS_PER_SLOT",
+    # storage
+    "CONFIG_FILENAME",
+    "CONVERSATIONS_DIR",
+    "LOGS_DIR",
+    "MASTER_KEY_FILENAME",
+    "PAIRING_SESSION_FILENAME",
+    "REGISTRY_FILENAME",
+    "WORKSPACE_DB_FILENAME",
+    # timing
+    "DEFAULT_AUTH_TIMEOUT_SECONDS",
+    "DEFAULT_PAIRING_WAIT_SECONDS",
+    "DEFAULT_PING_INTERVAL_SECONDS",
+    "LOG_ROTATION_BACKUP_COUNT",
+    "LOG_ROTATION_MAX_BYTES",
+]

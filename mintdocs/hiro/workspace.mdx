@@ -1,0 +1,190 @@
+---
+title: "Workspace"
+description: "Create, inspect, update, and manage isolated workspace instances for hirocli."
+icon: "folder"
+---
+
+A workspace is an isolated desktop-server instance with its own config, keys, state, channels, logs, and process IDs.
+
+Each workspace has an **immutable UUID id** (used as the registry key, autostart task suffix, and stable identifier) and a **mutable display name** that can be freely renamed.
+
+Use workspace commands to create, inspect, update, and remove these instances.
+
+For on-disk paths and JSON file formats, see `/cli-storage`.
+
+## Resolution order
+
+Commands that accept `--workspace` resolve the target by **id or name** in this order:
+
+1. `--workspace <name-or-id>`
+2. `HIRO_WORKSPACE` environment variable
+3. default workspace in registry (stored by id)
+
+<Note>
+  `--workspace` accepts either the display name or the UUID id. If multiple workspaces share the same name, the CLI will prompt you to use the id instead.
+</Note>
+
+### Environment variable examples
+
+```bash
+# one command (Linux/macOS)
+HIRO_WORKSPACE=home hirocli status
+```
+
+```powershell
+# PowerShell session (Windows)
+$env:HIRO_WORKSPACE = "home"
+hirocli start
+hirocli status
+```
+
+```bat
+:: cmd.exe session (Windows)
+set HIRO_WORKSPACE=home
+hirocli start
+hirocli status
+```
+
+### Internal process env var
+
+When `hirocli start` launches a detached server process, the CLI passes `HIRO_WORKSPACE_PATH` to the child process internally.
+
+- You do not need to set `HIRO_WORKSPACE_PATH` manually.
+- This keeps each background process bound to the correct workspace folder.
+
+## List workspaces
+
+```bash
+hirocli workspace list
+```
+
+Shows all configured workspaces, their status, ports, and paths.
+
+- `*` marks the default workspace.
+- `ID` shows the first 8 characters of the workspace UUID.
+- `Setup` shows whether the workspace has been configured (`hirocli setup`).
+- `Server` shows whether the workspace server process is running.
+- `Gateway URL` is the external WebSocket gateway this workspace connects to.
+
+## Create a workspace
+
+```bash
+hirocli workspace create <name>
+```
+
+Creates a new workspace with an auto-generated UUID and assigns ports from the managed port-slot range.
+
+```bash
+hirocli workspace create dev
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--path`, `-p` | Create the workspace at a custom folder path. |
+| `--set-default` | Set this workspace as the default immediately. |
+
+### Examples
+
+```bash
+# Create in a custom folder
+hirocli workspace create work -p "D:\\Hiro\\work"
+
+# Create and set default
+hirocli workspace create lab --set-default
+```
+
+<Note>
+  After creating a workspace, run `hirocli setup --workspace <name>` to initialize its server config.
+</Note>
+
+## Show workspace details
+
+```bash
+hirocli workspace show [name-or-id]
+```
+
+Displays detailed status and configuration for one workspace:
+
+- Name, UUID id, path, port slot, and whether it is the default
+- Setup status — whether `hirocli setup` has been run
+- Server running state and PID
+- Gateway URL and WebSocket connection status
+- Device ID
+- HTTP, plugin, and admin ports
+
+If `name-or-id` is omitted, the command shows the default workspace.
+
+## Update a workspace
+
+```bash
+hirocli workspace update <name-or-id> [options]
+```
+
+Updates one or more mutable workspace properties in a single command.
+
+| Option | Description |
+|--------|-------------|
+| `--name`, `-n` | New display name. The UUID id, path, and ports are unchanged. |
+| `--set-default` | Set this workspace as the default for commands run without `--workspace`. |
+| `--gateway-url`, `-g` | New gateway WebSocket URL (light update — no key regeneration). For full reconfiguration use `hirocli setup`. |
+
+### Examples
+
+```bash
+# Rename
+hirocli workspace update dev --name development
+
+# Set as default
+hirocli workspace update dev --set-default
+
+# Rename and set default in one go
+hirocli workspace update dev --name development --set-default
+
+# Change gateway URL
+hirocli workspace update home --gateway-url ws://newhost:8765
+```
+
+## Remove a workspace
+
+```bash
+hirocli workspace remove <name-or-id>
+```
+
+Removes the workspace from the registry.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--purge` | Also delete the workspace folder from disk. |
+| `--yes`, `-y` | Skip the confirmation prompt. |
+
+### Examples
+
+```bash
+# Remove from registry only
+hirocli workspace remove dev
+
+# Remove and delete all files
+hirocli workspace remove dev --purge
+```
+
+<Warning>
+  `--purge` permanently deletes the workspace folder, including config, keys, logs, and channel settings.
+</Warning>
+
+## Workflow example
+
+```bash
+hirocli workspace create home --set-default
+hirocli setup --workspace home --gateway-url ws://myhost:8765
+hirocli start --workspace home
+hirocli workspace show home
+```
+
+<Note>
+  `hirocli setup` saves configuration and registers auto-start but does **not** start the server by itself.
+  Add `--start-server` to start it immediately after setup, or run `hirocli start` separately.
+</Note>

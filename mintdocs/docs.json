@@ -16,28 +16,28 @@
           {
             "group": "Get Started",
             "pages": [
-              "phb/introduction",
-              "phb/quickstart"
+              "hiro/introduction",
+              "hiro/quickstart"
             ]
           },
           {
             "group": "CLI",
             "pages": [
-              "phb/setup-and-uninstall",
-              "phb/server-ops",
-              "phb/workspace",
-              "phb/cli-storage",
-              "phb/devices",
-              "phb/channel"
+              "hiro/setup-and-uninstall",
+              "hiro/server-ops",
+              "hiro/workspace",
+              "hiro/cli-storage",
+              "hiro/devices",
+              "hiro/channel"
             ]
           },
           {
             "group": "Gateway",
             "pages": [
-              "phb/gateway-cli",
-              "phb/gateway-instances",
-              "phb/gateway-runtime",
-              "phb/gateway-storage"
+              "hiro/gateway-cli",
+              "hiro/gateway-instances",
+              "hiro/gateway-runtime",
+              "hiro/gateway-storage"
             ]
           }
         ]

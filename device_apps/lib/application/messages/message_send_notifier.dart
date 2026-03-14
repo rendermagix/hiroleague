@@ -53,13 +53,13 @@ class MessageSendNotifier extends _$MessageSendNotifier {
         timestamp: now,
       );
 
-      // Payload must match phbcli's UnifiedMessage schema — 'channel' and 'direction'
+      // Payload must match hirocli's UnifiedMessage schema — 'channel' and 'direction'
       // are required fields. 'channel_id' is a client-side routing concept stored
       // in metadata so that other Flutter devices can route to the right conversation.
       gateway.send({
         'id': messageId,
-        'channel': AppConstants.gatewayChannelName, // required by phbcli
-        'direction': 'outbound',                    // required by phbcli
+        'channel': AppConstants.gatewayChannelName, // required by hirocli
+        'direction': 'outbound',                    // required by hirocli
         'content_type': 'text',
         'body': text,
         'sender_id': identity.deviceId,

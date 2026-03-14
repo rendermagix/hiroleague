@@ -3,28 +3,28 @@ title: "Server logging"
 description: "How Hiro League components initialise, configure, and view logs using the shared log_setup module."
 ---
 
-Hiro League uses a single logging standard across all components: the `phbcli` server, channel plugin subprocesses, and the gateway. Every process writes its own rotating log file. An optional foreground mode aggregates all logs into one terminal view for development and debugging.
+Hiro League uses a single logging standard across all components: the `hirocli` server, channel plugin subprocesses, and the gateway. Every process writes its own rotating log file. An optional foreground mode aggregates all logs into one terminal view for development and debugging.
 
 ## Design goals
 
 | Goal | How it is achieved |
 |---|---|
-| Single standard | All components call `phb_channel_sdk.log_setup.init()` once at startup |
+| Single standard | All components call `hiro_channel_sdk.log_setup.init()` once at startup |
 | Per-process files | Each component writes to its own `<component>.log` under its log directory |
 | Automatic rotation | `RotatingFileHandler` — 5 MB per file, 5 rotated backups kept |
 | Consistent format | ISO-8601 UTC timestamps on every line, same across all components |
-| Configurable levels | Root level and per-logger overrides stored in `~/.phbcli/config.json` |
-| Live aggregated view | `phbcli start --foreground` streams server + all plugin logs to the terminal |
+| Configurable levels | Root level and per-logger overrides stored in `~/.hirocli/config.json` |
+| Live aggregated view | `hirocli start --foreground` streams server + all plugin logs to the terminal |
 
 ## Log file locations
 
-### phbcli server and plugins
+### hirocli server and plugins
 
-All phbcli components write to the same directory (default `~/.phbcli/logs/`):
+All hirocli components write to the same directory (default `~/.hirocli/logs/`):
 
 ```text
-~/.phbcli/logs/
-  server.log          ← phbcli core (channel_manager, comm_manager, agent_manager, …)
+~/.hirocli/logs/
+  server.log          ← hirocli core (channel_manager, comm_manager, agent_manager, …)
   plugin-devices.log  ← devices channel subprocess
   plugin-telegram.log ← telegram channel subprocess (if installed)
   plugin-echo.log     ← echo channel subprocess (if installed)
@@ -35,7 +35,7 @@ The directory is created automatically on first start.
 ### Gateway
 
 ```text
-~/.phbgateway/logs/
+~/.hirogateway/logs/
   gateway.log
 ```
 
@@ -44,9 +44,9 @@ The directory is created automatically on first start.
 Every line follows this format:
 
 ```text
-2026-03-02T10:00:00.123Z [INFO    ] phbcli.agent_manager: Agent reply enqueued thread=devices:u1 content_length=42
-2026-03-02T10:00:01.456Z [WARNING ] phb_channel_sdk.transport: Disconnected from phbcli. Reconnecting in 5s…
-2026-03-02T10:00:02.789Z [DEBUG   ] phbcli.comm_manager: Inbound [channel=telegram sender=123456 content_type=text]
+2026-03-02T10:00:00.123Z [INFO    ] hirocli.agent_manager: Agent reply enqueued thread=devices:u1 content_length=42
+2026-03-02T10:00:01.456Z [WARNING ] hiro_channel_sdk.transport: Disconnected from hirocli. Reconnecting in 5s…
+2026-03-02T10:00:02.789Z [DEBUG   ] hirocli.comm_manager: Inbound [channel=telegram sender=123456 content_type=text]
 ```
 
 | Field | Description |
@@ -60,31 +60,31 @@ Every line follows this format:
 
 ### Log directory
 
-Add `log_dir` to `~/.phbcli/config.json` to override the default:
+Add `log_dir` to `~/.hirocli/config.json` to override the default:
 
 ```json
 {
-  "log_dir": "/var/log/phbcli"
+  "log_dir": "/var/log/hirocli"
 }
 ```
 
-Leave it empty (or omit it) to use the default `~/.phbcli/logs/`.
+Leave it empty (or omit it) to use the default `~/.hirocli/logs/`.
 
 For the gateway, pass `--log-dir` on the command line:
 
 ```bash
-phbgateway --log-dir /var/log/phbgateway
+hirogateway --log-dir /var/log/hirogateway
 ```
 
 ### Per-logger level overrides
 
-Add `log_levels` to `~/.phbcli/config.json` to set `DEBUG` on specific loggers without raising the root level for everything:
+Add `log_levels` to `~/.hirocli/config.json` to set `DEBUG` on specific loggers without raising the root level for everything:
 
 ```json
 {
   "log_levels": {
-    "phbcli.agent_manager": "DEBUG",
-    "phb_channel_devices.plugin": "DEBUG"
+    "hirocli.agent_manager": "DEBUG",
+    "hiro_channel_devices.plugin": "DEBUG"
   }
 }
 ```
@@ -100,9 +100,9 @@ Changes take effect on the next server restart.
 Run the server in the foreground to see all logs in the terminal as they happen:
 
 ```bash
-phbcli start --foreground
+hirocli start --foreground
 # or
-phbcli start -f
+hirocli start -f
 ```
 
 In this mode:
@@ -114,21 +114,21 @@ In this mode:
 
 ### File — detached mode
 
-In normal detached mode (`phbcli start`), all output is written to log files only.
+In normal detached mode (`hirocli start`), all output is written to log files only.
 
 <CodeGroup>
 
 ```powershell Windows
 # Tail server log
-Get-Content "$env:USERPROFILE\.phbcli\logs\server.log" -Wait -Tail 50
+Get-Content "$env:USERPROFILE\.hirocli\logs\server.log" -Wait -Tail 50
 
 # Tail devices plugin log
-Get-Content "$env:USERPROFILE\.phbcli\logs\plugin-devices.log" -Wait -Tail 50
+Get-Content "$env:USERPROFILE\.hirocli\logs\plugin-devices.log" -Wait -Tail 50
 ```
 
 ```bash macOS / Linux
-tail -f ~/.phbcli/logs/server.log
-tail -f ~/.phbcli/logs/plugin-devices.log
+tail -f ~/.hirocli/logs/server.log
+tail -f ~/.hirocli/logs/plugin-devices.log
 ```
 
 </CodeGroup>
@@ -139,15 +139,15 @@ Because every line starts with an ISO-8601 UTC timestamp in the same format, any
 
 ```bash
 # Merge and sort by timestamp
-sort -m ~/.phbcli/logs/*.log | less
+sort -m ~/.hirocli/logs/*.log | less
 
 # Or with multitail
-multitail ~/.phbcli/logs/server.log ~/.phbcli/logs/plugin-devices.log
+multitail ~/.hirocli/logs/server.log ~/.hirocli/logs/plugin-devices.log
 ```
 
 ## The `log_setup` module
 
-All log initialisation lives in `phb-channel-sdk` at `phb_channel_sdk/log_setup.py` so that every component — including third-party channel plugins — can use the same standard without depending on `phbcli`.
+All log initialisation lives in `hiro-channel-sdk` at `hiro_channel_sdk/log_setup.py` so that every component — including third-party channel plugins — can use the same standard without depending on `hirocli`.
 
 ### `init()`
 
@@ -155,11 +155,11 @@ Call this **once**, as the very first thing at process start, before any other l
 
 ```python
 from pathlib import Path
-from phb_channel_sdk import log_setup
+from hiro_channel_sdk import log_setup
 
 log_setup.init(
-    "plugin-mytelegram",          # → ~/.phbcli/logs/plugin-mytelegram.log
-    Path.home() / ".phbcli" / "logs",
+    "plugin-mytelegram",          # → ~/.hirocli/logs/plugin-mytelegram.log
+    Path.home() / ".hirocli" / "logs",
 )
 ```
 
@@ -175,7 +175,7 @@ log_setup.init(
 
 | Component | `component` argument | Log file |
 |---|---|---|
-| phbcli server | `"server"` | `server.log` |
+| hirocli server | `"server"` | `server.log` |
 | Channel plugin | `f"plugin-{plugin.info.name}"` | `plugin-<name>.log` |
 | Gateway | `"gateway"` | `gateway.log` |
 
@@ -187,21 +187,21 @@ The plugin entry point receives `--log-dir` from `ChannelManager` automatically.
 import asyncio
 from pathlib import Path
 import typer
-from phb_channel_sdk import PluginTransport, log_setup
+from hiro_channel_sdk import PluginTransport, log_setup
 from .plugin import MyChannel
 
-_DEFAULT_LOG_DIR = str(Path.home() / ".phbcli" / "logs")
+_DEFAULT_LOG_DIR = str(Path.home() / ".hirocli" / "logs")
 
 app = typer.Typer()
 
 @app.command()
 def run(
-    phb_ws: str = typer.Option("ws://127.0.0.1:18081", "--phb-ws"),
+    hiro_ws: str = typer.Option("ws://127.0.0.1:18081", "--hiro-ws"),
     log_dir: str = typer.Option(_DEFAULT_LOG_DIR, "--log-dir"),
 ) -> None:
     plugin = MyChannel()
     log_setup.init(f"plugin-{plugin.info.name}", Path(log_dir))
-    transport = PluginTransport(plugin, phb_ws)
+    transport = PluginTransport(plugin, hiro_ws)
     asyncio.run(transport.run())
 ```
 
@@ -228,7 +228,7 @@ Do not call `logging.basicConfig()` in a plugin. The `log_setup.init()` call in 
 `ChannelManager._spawn_one` appends the log directory to every plugin command automatically, using the same `resolve_log_dir(config)` value as the server itself:
 
 ```text
-phb-channel-devices --phb-ws ws://127.0.0.1:18081 --log-dir ~/.phbcli/logs
+hiro-channel-devices --hiro-ws ws://127.0.0.1:18081 --log-dir ~/.hirocli/logs
 ```
 
 This means plugin log files always land alongside the server log unless the user has explicitly overridden `log_dir` in `config.json`.
@@ -237,10 +237,10 @@ This means plugin log files always land alongside the server log unless the user
 
 | File | Role |
 |---|---|
-| `phb-channel-sdk/src/phb_channel_sdk/log_setup.py` | Shared `init()` function — the only place log format, rotation, and handler setup is defined |
-| `phbcli/src/phbcli/config.py` | `Config.log_dir`, `Config.log_levels`, `resolve_log_dir()` |
-| `phbcli/src/phbcli/_server_process.py` | Calls `log_setup.init("server", …)` at the top of `_main()` |
-| `phbcli/src/phbcli/cli.py` | `phbcli start --foreground` flag |
-| `phbcli/src/phbcli/channel_manager.py` | Appends `--log-dir` to every plugin subprocess command |
-| `gateway/src/phbgateway/main.py` | Calls `log_setup.init("gateway", …, foreground=True)` |
+| `hiro-channel-sdk/src/hiro_channel_sdk/log_setup.py` | Shared `init()` function — the only place log format, rotation, and handler setup is defined |
+| `hirocli/src/hirocli/config.py` | `Config.log_dir`, `Config.log_levels`, `resolve_log_dir()` |
+| `hirocli/src/hirocli/_server_process.py` | Calls `log_setup.init("server", …)` at the top of `_main()` |
+| `hirocli/src/hirocli/cli.py` | `hirocli start --foreground` flag |
+| `hirocli/src/hirocli/channel_manager.py` | Appends `--log-dir` to every plugin subprocess command |
+| `gateway/src/hirogateway/main.py` | Calls `log_setup.init("gateway", …, foreground=True)` |
 | `channels/*/src/*/main.py` | Each plugin entry point calls `log_setup.init(f"plugin-{name}", log_dir)` |

@@ -5,7 +5,7 @@ description: "Day-to-day commands for syncing dependencies, generating code, run
 
 This page covers everything you run regularly while developing — keeping dependencies in sync after a pull, regenerating Dart code after model changes, running the app locally, and producing web and Android builds. For first-time machine setup, see [First Time Setup](/build/first-time-setup).
 
-## PHBServer — sync after pulling
+## Hiro Server — sync after pulling
 
 Run this every time you pull changes or switch branches:
 
@@ -16,14 +16,14 @@ Run this every time you pull changes or switch branches:
 It performs the following steps:
 
 ```bash
-phbcli stop          # release Windows file lock on the binary before overwriting
-cd phbserver
+hirocli stop          # release Windows file lock on the binary before overwriting
+cd hiroserver
 uv sync
-uv tool install --editable phbcli --upgrade --force
+uv tool install --editable hirocli --upgrade --force
 ```
 
 <Warning>
-`uv sync` alone is **not enough** after code changes. `phbcli` is a `uv tool` — its entry-point scripts are baked at install time. If `pyproject.toml` or the package structure changes, the old script will point at a stale or missing module and fail with `ModuleNotFoundError`. Always run `./dev-sync.sh` after pulling. On Windows the server must be stopped first so the binary file lock is released.
+`uv sync` alone is **not enough** after code changes. `hirocli` is a `uv tool` — its entry-point scripts are baked at install time. If `pyproject.toml` or the package structure changes, the old script will point at a stale or missing module and fail with `ModuleNotFoundError`. Always run `./dev-sync.sh` after pulling. On Windows the server must be stopped first so the binary file lock is released.
 </Warning>
 
 ## Flutter — dev task runner (`dev.sh`)
@@ -144,14 +144,14 @@ Always run `./dev.sh --codegen` once after `flutter pub get` on a fresh clone, b
     These warnings are printed by Flutter's Wasm dry-run check and are expected. The standard JavaScript/CanvasKit web build completes successfully regardless. You can suppress the warnings with `--no-wasm-dry-run`, but they do not indicate a real build problem.
   </Accordion>
 
-  <Accordion title="ModuleNotFoundError when running phbcli after pulling">
+  <Accordion title="ModuleNotFoundError when running hirocli after pulling">
     The server code changed but the installed tool entry-point still points to the old module layout. Run the sync script to reinstall:
 
     ```bash
     ./dev-sync.sh
     ```
 
-    On Windows, stop the server first (`phbcli stop`) so the binary file lock is released before the reinstall.
+    On Windows, stop the server first (`hirocli stop`) so the binary file lock is released before the reinstall.
   </Accordion>
 
   <Accordion title="flutter run picks up stale generated code after adding a new model">

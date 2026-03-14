@@ -1,7 +1,7 @@
 /// All user-facing strings. Use these in widgets — no hardcoded strings.
 /// Will be migrated to ARB files when i18n is added.
 abstract final class AppStrings {
-  static const String appName = 'Private Home Box';
+  static const String appName = 'Hiro';
 
   // Navigation labels
   static const String navChannels = 'Channels';

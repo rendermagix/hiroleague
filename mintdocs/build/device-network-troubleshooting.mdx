@@ -173,7 +173,7 @@ Test-NetConnection -ComputerName 10.0.1.54 -Port 8765
 
 ## Hiro League Gateway bind troubleshooting
 
-The most common failure is that `phbgateway` is configured to bind to `localhost:8765`.
+The most common failure is that `hirogateway` is configured to bind to `localhost:8765`.
 
 That allows desktop local access but blocks phones.
 
@@ -200,8 +200,8 @@ After fixing the bind host, `netstat` shows:
 From the gateway package directory:
 
 ```powershell
-uv run phbgateway instance list
-uv run phbgateway instance show default
+uv run hirogateway instance list
+uv run hirogateway instance show default
 ```
 
 This reveals the configured bind host and port for the instance.
@@ -211,13 +211,13 @@ This reveals the configured bind host and port for the instance.
 Stop the gateway if needed:
 
 ```powershell
-uv run phbgateway stop --instance default
+uv run hirogateway stop --instance default
 ```
 
 Update the registry host to `0.0.0.0`:
 
 ```powershell
-$reg = "$env:LOCALAPPDATA\phbgateway\registry.json"
+$reg = "$env:LOCALAPPDATA\hirogateway\registry.json"
 $j = Get-Content $reg -Raw | ConvertFrom-Json
 $j.instances.default.host = "0.0.0.0"
 $j | ConvertTo-Json -Depth 8 | Set-Content $reg
@@ -226,7 +226,7 @@ $j | ConvertTo-Json -Depth 8 | Set-Content $reg
 Start the gateway again:
 
 ```powershell
-uv run phbgateway start --instance default --foreground
+uv run hirogateway start --instance default --foreground
 ```
 
 Verify:
@@ -240,7 +240,7 @@ netstat -ano | findstr :8765
 The gateway instance registry lives at:
 
 ```text
-%LOCALAPPDATA%\phbgateway\registry.json
+%LOCALAPPDATA%\hirogateway\registry.json
 ```
 
 A typical registry looks like:
@@ -251,7 +251,7 @@ A typical registry looks like:
   "instances": {
     "default": {
       "name": "default",
-      "path": "C:\\Users\\augr\\AppData\\Local\\phbgateway\\instances\\default",
+      "path": "C:\\Users\\augr\\AppData\\Local\\hirogateway\\instances\\default",
       "host": "0.0.0.0",
       "port": 8765
     }
@@ -261,11 +261,11 @@ A typical registry looks like:
 
 The `host` should be `0.0.0.0` for phone access.
 
-## Checking phbcli workspace defaults
+## Checking hirocli workspace defaults
 
 For a local setup, no changes are needed.
 
-`phbcli` runs on the same machine as the gateway, so its default workspace config can still use:
+`hirocli` runs on the same machine as the gateway, so its default workspace config can still use:
 
 ```text
 ws://localhost:8765
@@ -275,10 +275,10 @@ That is valid for the desktop process itself.
 
 ### Practical rule
 
-- **Desktop `phbcli`:** `ws://localhost:8765`
+- **Desktop `hirocli`:** `ws://localhost:8765`
 - **Physical phone app:** `ws://<LAN_IP>:8765`
 
-Only change `phbcli` workspace `gateway_url` if the gateway is moved to a different machine.
+Only change `hirocli` workspace `gateway_url` if the gateway is moved to a different machine.
 
 ## Windows firewall
 
@@ -367,7 +367,7 @@ File: `device_apps/android/app/src/main/AndroidManifest.xml`
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="phb_app"
+        android:label="hiro_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
@@ -474,8 +474,8 @@ New-NetFirewallRule -DisplayName "Hiro League Gateway 8765" -Direction Inbound -
 ### Inspect gateway instance config
 
 ```powershell
-uv run phbgateway instance list
-uv run phbgateway instance show default
+uv run hirogateway instance list
+uv run hirogateway instance show default
 ```
 
 ### Restart ADB

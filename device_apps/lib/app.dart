@@ -5,8 +5,8 @@ import 'config/router/app_router.dart';
 import 'core/constants/app_strings.dart';
 import 'core/ui/theme/app_theme.dart';
 
-class PhbApp extends ConsumerWidget {
-  const PhbApp({super.key});
+class HiroApp extends ConsumerWidget {
+  const HiroApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

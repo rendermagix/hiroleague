@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hiro-channel-devices"
+version = "0.1.0"
+description = "Private Home Box — device channel plugin bridging gateway <-> unified messages"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["home", "server", "channel", "plugin", "devices", "gateway"]
+dependencies = [
+    "hiro-channel-sdk",
+    "websockets>=12",
+    "typer>=0.12",
+    "cryptography>=43",
+    "hiro-commons",
+]
+
+[project.scripts]
+hiro-channel-devices = "hiro_channel_devices.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hiro_channel_devices"]
+
+[tool.uv.sources]
+hiro-channel-sdk = { workspace = true }
+hiro-commons = { workspace = true }

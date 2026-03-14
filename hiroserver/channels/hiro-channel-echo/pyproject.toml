@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hiro-channel-echo"
+version = "0.1.0"
+description = "Private Home Box — echo channel plugin for development and testing"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["home", "server", "channel", "plugin", "echo"]
+dependencies = [
+    "hiro-channel-sdk",
+    "typer>=0.12",
+    "hiro-commons",
+]
+
+[project.scripts]
+hiro-channel-echo = "hiro_channel_echo.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hiro_channel_echo"]
+
+[tool.uv.sources]
+hiro-channel-sdk = { workspace = true }
+hiro-commons = { workspace = true }

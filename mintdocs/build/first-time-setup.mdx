@@ -5,21 +5,20 @@ description: "Everything you need to install once on a new machine before you ca
 
 This page covers one-time installation steps for a fresh clone. You only need to do these once per machine. For day-to-day build and run commands, see [Building](/build/building).
 
-## PHBServer (phbcli + phbgateway)
+## HiroServer (hirocli + hirogateway)
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) — the Python package and project manager used by the server.
 
 After cloning, run from the repo root:
 
 ```bash
-cd phbserver
+cd hiroserver
 uv sync
-uv tool install --editable phbcli
+uv tool install --editable hirocli
+uv tool install --editable gateway
 ```
 
-`uv sync` installs all workspace dependencies (shared by both `phbcli` and `phbgateway`). `uv tool install --editable phbcli` installs both the `phbcli` and `phb-channel-devices` binaries — the mandatory channel is declared as a script in `phbcli`'s `pyproject.toml`, so a single tool install covers both.
-
-`phbgateway` does not need a separate tool install — it runs directly from the workspace via `uv run phbgateway`.
+`uv sync` installs all workspace dependencies (shared by both `hirocli` and `hirogateway`). `uv tool install --editable hirocli` installs both the `hirocli` and `hiro-channel-devices` binaries — the mandatory channel is declared as a script in `hirocli`'s `pyproject.toml`, so a single tool install covers both. `uv tool install --editable gateway` installs the `hirogateway` binary.
 
 ## Mobile / web app
 
@@ -64,14 +63,15 @@ See [Diagram generator](/build/diagram-generator) for authoring and workflow det
   <Accordion title="Cursor asks to select a Python interpreter after renaming or moving the folder">
     Cursor stores the interpreter selection internally by workspace path. Renaming or moving the folder creates a new workspace identity and loses the previous selection.
 
-    The repo's `.vscode/settings.json` already pins the interpreter to `${workspaceFolder}\phbserver\.venv\Scripts\python.exe`, so simply opening the renamed folder in Cursor should pick it up automatically. If the prompt still appears, click **Select Interpreter** and choose the venv Python at that path, or run **Python: Select Interpreter** from the command palette and point it to `phbserver\.venv\Scripts\python.exe` inside the repo.
+    The repo's `.vscode/settings.json` already pins the interpreter to `${workspaceFolder}\hiroserver\.venv\Scripts\python.exe`, so simply opening the renamed folder in Cursor should pick it up automatically. If the prompt still appears, click **Select Interpreter** and choose the venv Python at that path, or run **Python: Select Interpreter** from the command palette and point it to `hiroserver\.venv\Scripts\python.exe` inside the repo.
   </Accordion>
 
-  <Accordion title="uv sync installs dependencies but phbcli command is still not found">
-    `uv sync` only installs the workspace virtual environment — it does not install tool entry-point scripts. You must also run the tool install step:
+  <Accordion title="uv sync installs dependencies but hirocli or hirogateway command is still not found">
+    `uv sync` only installs the workspace virtual environment — it does not install tool entry-point scripts. You must also run the tool install steps:
 
     ```bash
-    uv tool install --editable phbcli
+    uv tool install --editable hirocli
+    uv tool install --editable gateway
     ```
   </Accordion>
 </AccordionGroup>

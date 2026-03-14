@@ -50,7 +50,7 @@ No new REST endpoints or internal APIs are needed for the initial version. The U
 
 ## Architecture
 
-The admin UI runs as a conditional coroutine inside the workspace server process. It starts only when the user passes `--admin` to `phbcli start`.
+The admin UI runs as a conditional coroutine inside the workspace server process. It starts only when the user passes `--admin` to `hirocli start`.
 
 ```mermaid actions={true} placement="top-right"
 graph LR
@@ -79,10 +79,10 @@ graph LR
 
 ```bash
 # Start server with admin UI
-phbcli start --admin
+hirocli start --admin
 
 # Start server without admin UI (default, unchanged)
-phbcli start
+hirocli start
 ```
 
 The `--admin` flag is a boolean on the `start` command and the `StartTool`. When set, the server process adds `run_admin_ui(config, stop_event)` to its coroutine list alongside the existing four coroutines.
@@ -98,7 +98,7 @@ The admin UI runs on a **separate port** from the HTTP API. 4 ports are reserved
 | +2 | *(reserved)* | — |
 | +3 | Admin UI | 18083 |
 
-`PORT_OFFSET_ADMIN = 3` and `admin_port_for()` compute the admin port from the workspace slot. The `Config` model carries an `admin_port` field set during `phbcli setup`.
+`PORT_OFFSET_ADMIN = 3` and `admin_port_for()` compute the admin port from the workspace slot. The `Config` model carries an `admin_port` field set during `hirocli setup`.
 
 ### Localhost only
 
@@ -165,7 +165,7 @@ These rules apply to the Workspaces page and must be enforced both at the tool l
 |---|---|---|
 | **Remove** | Workspace is running | Blocked. Tool raises `WorkspaceError`: stop the server first. |
 | **Remove** | Workspace is the default and others exist | Blocked. Tool raises `WorkspaceError`: set another workspace as default first. |
-| **Set default** | Workspace is not configured | Blocked. Tool raises `WorkspaceError`: run `phbcli setup` first. |
+| **Set default** | Workspace is not configured | Blocked. Tool raises `WorkspaceError`: run `hirocli setup` first. |
 | **Stop** | Workspace is the current Admin UI workspace | Blocked in UI only. Notification explains to use another workspace's Admin UI. |
 | **Remove** | Workspace is the current Admin UI workspace | Blocked in UI only. Delete button replaced with a lock icon; notification explains. |
 
@@ -244,7 +244,7 @@ The dashboard calls tools in-process to assemble these numbers on page load. No 
 
 A table of all registered workspaces. Columns: name, setup status, server status (running/stopped), gateway URL, HTTP port, admin port, default flag.
 
-Data source: `WorkspaceListTool` (includes `id`, `is_configured`, `gateway_url`, `admin_port`); running state derived from `phbcli.pid` per workspace path.
+Data source: `WorkspaceListTool` (includes `id`, `is_configured`, `gateway_url`, `admin_port`); running state derived from `hirocli.pid` per workspace path.
 
 Actions per row:
 
@@ -336,7 +336,7 @@ The tailing mechanism mirrors the existing `_tail_plugin_logs` coroutine in `ser
 
 ## Dependency
 
-NiceGUI is added to `phbcli/pyproject.toml`:
+NiceGUI is added to `hirocli/pyproject.toml`:
 
 ```toml
 dependencies = [
@@ -352,7 +352,7 @@ No other new dependencies are needed. NiceGUI brings its own Quasar/Vue.js front
 ## File layout
 
 ```
-phbcli/src/phbcli/
+hirocli/src/hirocli/
 ├── ui/
 │   ├── __init__.py
 │   ├── app.py              # NiceGUI app setup, layout shell, sidebar

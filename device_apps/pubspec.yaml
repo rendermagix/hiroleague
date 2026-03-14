@@ -1,5 +1,5 @@
 name: device_apps
-description: "Private Home Box — Flutter client."
+description: "Hiro — Flutter client."
 publish_to: 'none'
 
 version: 0.1.0+1

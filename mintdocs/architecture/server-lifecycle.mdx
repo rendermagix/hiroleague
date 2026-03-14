@@ -1,6 +1,6 @@
 ---
 title: "Server lifecycle"
-description: "How phbcli stops and restarts the server process gracefully — including the HTTP-based shutdown mechanism and the self-restart state machine."
+description: "How hirocli stops and restarts the server process gracefully — including the HTTP-based shutdown mechanism and the self-restart state machine."
 icon: "power-off"
 ---
 
@@ -14,7 +14,7 @@ The consequence of a force kill on Windows is that `ChannelManager._shutdown_cha
 
 ## HTTP-based graceful shutdown
 
-To solve this on all platforms, `phbcli stop` (and `phbcli restart`) no longer rely on OS signals as the primary shutdown path. Instead, the server exposes two internal HTTP endpoints:
+To solve this on all platforms, `hirocli stop` (and `hirocli restart`) no longer rely on OS signals as the primary shutdown path. Instead, the server exposes two internal HTTP endpoints:
 
 | Endpoint | Method | Effect |
 |---|---|---|
@@ -41,7 +41,7 @@ graph TD
   <img src="/images/diagrams/server-lifecycle--diagram-1.png" alt="Graceful shutdown sequence from HTTP endpoint to process exit" width="100" />
 </Frame>
 
-`phbcli stop` calls `POST /_shutdown`, then polls `is_running(pid)` for up to 10 seconds. If the process exits within that window, the stop is considered successful. If it does not (e.g. the server was not yet fully started and the HTTP port was unreachable), it falls back to `kill_process()` — force kill as a last resort, not the default.
+`hirocli stop` calls `POST /_shutdown`, then polls `is_running(pid)` for up to 10 seconds. If the process exits within that window, the stop is considered successful. If it does not (e.g. the server was not yet fully started and the HTTP port was unreachable), it falls back to `kill_process()` — force kill as a last resort, not the default.
 
 ---
 
@@ -51,7 +51,7 @@ There are two distinct callers that can trigger a restart, and they require diff
 
 ### Path 1 — External caller (CLI)
 
-`phbcli restart` runs as a separate process, outside the server. It calls `_do_stop()` to send `POST /_shutdown` and wait for exit, then calls `_do_start()` to spawn a new detached background process. This is the simplest path: sequential stop → start, with full control over the new process flags (`admin`, `foreground`).
+`hirocli restart` runs as a separate process, outside the server. It calls `_do_stop()` to send `POST /_shutdown` and wait for exit, then calls `_do_start()` to spawn a new detached background process. This is the simplest path: sequential stop → start, with full control over the new process flags (`admin`, `foreground`).
 
 ### Path 2 — In-process caller (admin UI)
 
@@ -92,8 +92,8 @@ The in-process path returns `new_pid=None` in `RestartResult` because the new pr
 
 | Caller | Stop mechanism | Start mechanism | `new_pid` in result |
 |---|---|---|---|
-| `phbcli stop` | `POST /_shutdown` → wait → force kill fallback | — | — |
-| `phbcli restart` | `POST /_shutdown` → wait → force kill fallback | `_do_start()` spawns new process | Available immediately |
+| `hirocli stop` | `POST /_shutdown` → wait → force kill fallback | — | — |
+| `hirocli restart` | `POST /_shutdown` → wait → force kill fallback | `_do_start()` spawns new process | Available immediately |
 | Admin UI (`/invoke restart`) | `request_restart()` sets flag + schedules `stop_event` | `_spawn_server()` runs after shutdown | `None` (process not yet started) |
 
 ---
@@ -105,4 +105,4 @@ The in-process path returns `new_pid=None` in `RestartResult` because the new pr
 | `runtime/http_server.py` | Owns `_stop_event`, `_restart_requested`, `_restart_admin`. Exposes `/_shutdown` and `/_restart` endpoints. Exposes `request_shutdown()` and `request_restart()` for direct in-process use. |
 | `runtime/server_process.py` | Sets `stop_event` on `http_server` at startup. Checks `is_restart_requested()` after shutdown and calls `_spawn_server()` if set. Owns `_spawn_server()` which mirrors the background spawn logic from `tools/server.py`. |
 | `tools/server.py` | `_do_stop()` calls `POST /_shutdown` and waits. `RestartTool` detects in-process vs external caller and dispatches accordingly. |
-| `phb_commons/process.py` | `stop_process()` / `kill_process()` — force kill fallback, used only when HTTP is unreachable. See [process spawning](/architecture/process-spawning) for background process management conventions. |
+| `hiro_commons/process.py` | `stop_process()` / `kill_process()` — force kill fallback, used only when HTTP is unreachable. See [process spawning](/architecture/process-spawning) for background process management conventions. |

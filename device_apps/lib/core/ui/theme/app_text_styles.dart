@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// PHB-specific text style overrides.
+/// Hiro-specific text style overrides.
 /// Material3 base typography is handled by FlexColorScheme — only
 /// app-domain styles are defined here.
 abstract final class AppTextStyles {

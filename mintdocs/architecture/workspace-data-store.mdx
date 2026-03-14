@@ -206,7 +206,7 @@ Every new column must either be nullable or carry a `DEFAULT` value. This is a h
 
 ### Destructive changes (rename, type change, drop)
 
-`_EXPECTED_COLUMNS` only handles additive changes.  Renames, type changes, and column drops require either a versioned one-off SQL entry (gated by `PRAGMA user_version`) or a full table rebuild.  A lightweight migration runner for these cases will be added once development stabilises and the schema reaches a stable baseline.  Until then, a `reset_db()` helper that deletes and recreates `workspace.db` is sufficient — users re-run `phbcli channel setup` and `phbcli device add` to repopulate.
+`_EXPECTED_COLUMNS` only handles additive changes.  Renames, type changes, and column drops require either a versioned one-off SQL entry (gated by `PRAGMA user_version`) or a full table rebuild.  A lightweight migration runner for these cases will be added once development stabilises and the schema reaches a stable baseline.  Until then, a `reset_db()` helper that deletes and recreates `workspace.db` is sufficient — users re-run `hirocli channel setup` and `hirocli device add` to repopulate.
 
 ### SQLite version floor
 
@@ -253,7 +253,7 @@ There is no mirroring, no reconciliation, and no two-way binding between the two
 
 ### 1. Add dependencies
 
-Add to `phbserver/phbcli/pyproject.toml`:
+Add to `hiroserver/hirocli/pyproject.toml`:
 
 ```toml
 aiosqlite = "*"
@@ -264,7 +264,7 @@ sqlmodel = "*"
 
 ### 2. Create the database module
 
-Create `phbserver/phbcli/src/phbcli/domain/db.py`:
+Create `hiroserver/hirocli/src/hirocli/domain/db.py`:
 
 - `async def init_db(workspace_path: Path) -> aiosqlite.Connection` — opens `workspace.db`, runs `CREATE TABLE IF NOT EXISTS` for all four tables, returns the connection
 - `async def get_db(workspace_path: Path)` — async context manager wrapping `init_db`
@@ -287,7 +287,7 @@ No changes are needed above the `domain/` layer — tools, commands, and runtime
 
 ### 4. Create the conversation log writer
 
-Create `phbserver/phbcli/src/phbcli/domain/conversation_log.py`:
+Create `hiroserver/hirocli/src/hirocli/domain/conversation_log.py`:
 
 - `async def append_message(workspace_path: Path, channel_id: str, message: dict)` — opens `conversations/<channel_id>.jsonl` in append mode, writes one JSON line
 - `async def read_messages(workspace_path: Path, channel_id: str, limit: int = 100) -> list[dict]` — reads the last `limit` lines from the file

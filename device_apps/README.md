@@ -1,6 +1,6 @@
 # device_apps
 
-Private Home Box — Flutter client.
+Hiro — Flutter client.
 
 ## Getting Started
 

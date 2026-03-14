@@ -6,7 +6,7 @@ icon: "plug"
 
 Channel plugins are the mechanism by which Hiro League connects to third-party messaging platforms — Telegram, WhatsApp, a custom mobile app, and anything else that can send and receive messages.
 
-Each plugin is a **standalone Python package** that runs as a **subprocess** managed by `phbcli`. It connects back to phbcli over a **local WebSocket** and speaks a **JSON-RPC 2.0** protocol. The plugin is entirely responsible for translating between the unified Hiro League message format and whatever the third party requires.
+Each plugin is a **standalone Python package** that runs as a **subprocess** managed by `hirocli`. It connects back to hirocli over a **local WebSocket** and speaks a **JSON-RPC 2.0** protocol. The plugin is entirely responsible for translating between the unified Hiro League message format and whatever the third party requires.
 
 ---
 
@@ -15,10 +15,10 @@ Each plugin is a **standalone Python package** that runs as a **subprocess** man
 | Goal | How it is achieved |
 |---|---|
 | Dependency isolation | Each plugin is its own uv workspace member with its own virtualenv — no conflicts between e.g. `python-telegram-bot` and a WhatsApp SDK |
-| Crash isolation | A plugin crash does not bring down phbcli or other plugins |
+| Crash isolation | A plugin crash does not bring down hirocli or other plugins |
 | Independent updates | Plugins are versioned and updated separately from the core server |
 | Uniform interface | All plugins speak the same JSON-RPC 2.0 dialect over a local WebSocket |
-| Developer ergonomics | `phb-channel-sdk` provides the full contract; authoring a new plugin requires implementing 4 methods |
+| Developer ergonomics | `hiro-channel-sdk` provides the full contract; authoring a new plugin requires implementing 4 methods |
 
 ---
 
@@ -27,9 +27,9 @@ Each plugin is a **standalone Python package** that runs as a **subprocess** man
 ```mermaid actions={true} placement="top-right"
 graph LR
     PM["ChannelManager<br/>:18081"]
-    TG["phb-channel-telegram<br/>(subprocess)"]
-    WA["phb-channel-whatsapp<br/>(subprocess)"]
-    MA["phb-channel-mobileapp<br/>(subprocess)"]
+    TG["hiro-channel-telegram<br/>(subprocess)"]
+    WA["hiro-channel-whatsapp<br/>(subprocess)"]
+    MA["hiro-channel-mobileapp<br/>(subprocess)"]
     CM["CommunicationManager"]
     AM["AgentManager"]
 
@@ -49,24 +49,24 @@ graph LR
 
 ## Components
 
-### phb-channel-sdk
+### hiro-channel-sdk
 
-The shared library that defines the contract between phbcli and every plugin. It is a uv workspace member (`phbserver/phb-channel-sdk/`) and a declared dependency of every channel package.
+The shared library that defines the contract between hirocli and every plugin. It is a uv workspace member (`hiroserver/hiro-channel-sdk/`) and a declared dependency of every channel package.
 
 | Module | Exports | Purpose |
 |---|---|---|
 | `models.py` | `UnifiedMessage`, `ChannelInfo`, `RpcRequest`, `RpcResponse` | Pydantic data models |
 | `base.py` | `ChannelPlugin` | Abstract base class plugins implement |
 | `rpc.py` | `build_*`, `parse_message` | JSON-RPC 2.0 wire-format helpers |
-| `transport.py` | `PluginTransport` | WS client that connects to phbcli and dispatches calls |
+| `transport.py` | `PluginTransport` | WS client that connects to hirocli and dispatches calls |
 
 ### ChannelManager
 
-Lives in `phbcli/channel_manager.py`. On `phbcli start` it:
+Lives in `hirocli/channel_manager.py`. On `hirocli start` it:
 
 1. Opens a WebSocket server on `ws://127.0.0.1:<plugin_port>` (default `18081`).
-2. Reads `~/.phbcli/channels/*.json` to discover enabled channels.
-3. Spawns one subprocess per enabled channel, appending `--phb-ws <url>` and `--log-dir <path>`. Subprocess stdout/stderr are discarded — each plugin writes its own rotating log file to the log directory.
+2. Reads `~/.hirocli/channels/*.json` to discover enabled channels.
+3. Spawns one subprocess per enabled channel, appending `--hiro-ws <url>` and `--log-dir <path>`. Subprocess stdout/stderr are discarded — each plugin writes its own rotating log file to the log directory.
 4. Accepts incoming connections from plugin processes.
 5. Pushes the stored per-channel config (`config` field) to each plugin immediately after it registers.
 6. Routes inbound messages from plugins to the configured `on_message` callback.
@@ -88,13 +88,13 @@ See [Agent Manager](/architecture/agent-manager) for full details.
 
 ## Channel config files
 
-Channel configuration is stored at `~/.phbcli/channels/<name>.json` and managed via `phbcli channel setup|enable|disable|remove`.
+Channel configuration is stored at `~/.hirocli/channels/<name>.json` and managed via `hirocli channel setup|enable|disable|remove`.
 
 ```json
 {
   "name": "telegram",
   "enabled": true,
-  "command": ["phb-channel-telegram"],
+  "command": ["hiro-channel-telegram"],
   "config": {
     "bot_token": "123456:ABC-..."
   }
@@ -107,7 +107,7 @@ Channel configuration is stored at `~/.phbcli/channels/<name>.json` and managed 
 
 All messages are UTF-8 JSON over a single WebSocket connection per plugin. A **notification** has no `"id"` field (fire-and-forget). A **request** has an `"id"` and expects a **response** with the same `"id"`.
 
-### Plugin → phbcli
+### Plugin → hirocli
 
 | Method | Type | Params | When |
 |---|---|---|---|
@@ -115,7 +115,7 @@ All messages are UTF-8 JSON over a single WebSocket connection per plugin. A **n
 | `channel.receive` | notification | `UnifiedMessage` (dict) | Inbound message from third party |
 | `channel.event` | notification | `{event: str, data: any}` | Status changes, delivery receipts, errors |
 
-### phbcli → plugin
+### hirocli → plugin
 
 | Method | Type | Params | Purpose |
 |---|---|---|---|
@@ -180,9 +180,9 @@ graph TD
 
 ## UnifiedMessage format
 
-All messages in the system use `UnifiedMessage` — the canonical cross-channel format defined in `phb-channel-sdk`.
+All messages in the system use `UnifiedMessage` — the canonical cross-channel format defined in `hiro-channel-sdk`.
 
-`direction` is always from phbcli's perspective:
+`direction` is always from hirocli's perspective:
 - `"inbound"` — arriving from the third party (user sent something)
 - `"outbound"` — to be sent to the third party
 
@@ -221,9 +221,9 @@ All messages in the system use `UnifiedMessage` — the canonical cross-channel 
 
 ```mermaid actions={true} placement="top-right"
 graph TD
-    START["phbcli start"]
+    START["hirocli start"]
     WSS["ChannelManager starts<br/>WS server :18081"]
-    READ["reads ~/.phbcli/channels/*.json"]
+    READ["reads ~/.hirocli/channels/*.json"]
     SPAWN["subprocess.Popen per<br/>enabled channel"]
     LOGINIT["log_setup.init()"]
     TRANSPORT["PluginTransport.run()"]
@@ -244,26 +244,26 @@ graph TD
 ```
 
 <Frame caption="View full size">
-  <img src="/images/diagrams/channel-plugin-architecture--diagram-4.png" alt="Plugin lifecycle from phbcli start through plugin registration to running state" width="100" />
+  <img src="/images/diagrams/channel-plugin-architecture--diagram-4.png" alt="Plugin lifecycle from hirocli start through plugin registration to running state" width="100" />
 </Frame>
 
-On `phbcli stop`: the stop event is set, `channel.stop` is sent to each plugin, phbcli waits 1 second, then terminates any remaining subprocesses.
+On `hirocli stop`: the stop event is set, `channel.stop` is sent to each plugin, hirocli waits 1 second, then terminates any remaining subprocesses.
 
 ---
 
 ## uv workspace layout
 
 ```
-phbserver/
-├── pyproject.toml              # workspace root: members = [..., "phb-channel-sdk", "channels/*"]
-├── phb-channel-sdk/            # shared SDK (workspace member)
+hiroserver/
+├── pyproject.toml              # workspace root: members = [..., "hiro-channel-sdk", "channels/*"]
+├── hiro-channel-sdk/            # shared SDK (workspace member)
 └── channels/
-    ├── phb-channel-echo/       # echo test plugin (workspace member)
-    ├── phb-channel-telegram/   # (future)
-    └── phb-channel-whatsapp/   # (future)
+    ├── hiro-channel-echo/       # echo test plugin (workspace member)
+    ├── hiro-channel-telegram/   # (future)
+    └── hiro-channel-whatsapp/   # (future)
 ```
 
-Each channel package declares `phb-channel-sdk` as a workspace dependency, giving it an isolated virtualenv while sharing the workspace's common resolved lockfile.
+Each channel package declares `hiro-channel-sdk` as a workspace dependency, giving it an isolated virtualenv while sharing the workspace's common resolved lockfile.
 
 ---
 

@@ -93,7 +93,7 @@ class MessageRepositoryImpl implements MessageRepository {
     }
 
     // channel_id is a client-side concept stored in metadata by the sender.
-    // If absent (e.g. messages from phbcli agent), route to the default channel.
+    // If absent (e.g. messages from hirocli agent), route to the default channel.
     final metadata = payload['metadata'];
     final channelId = (metadata is Map ? metadata['channel_id']?.toString() : null)
         ?? AppConstants.defaultChannelId;

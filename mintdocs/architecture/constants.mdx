@@ -10,7 +10,7 @@ All configuration defaults, protocol values, filenames, and timing parameters li
 
 Before this design, the same values were duplicated across multiple packages with no single source of truth. The specific problems it resolves:
 
-**Duplicated values drifting apart.** The default gateway port `8765` appeared in four separate files. The ping interval `30` appeared in three. The log rotation size had two different values (`5 MB` in the channel SDK, `10 MB` in phb-commons) with no way to tell which was intentional. Any change required a manual search across the whole monorepo with no guarantee all instances were found.
+**Duplicated values drifting apart.** The default gateway port `8765` appeared in four separate files. The ping interval `30` appeared in three. The log rotation size had two different values (`5 MB` in the channel SDK, `10 MB` in hiro-commons) with no way to tell which was intentional. Any change required a manual search across the whole monorepo with no guarantee all instances were found.
 
 **Protocol values as inline magic numbers.** WebSocket close codes like `4003`, `4009`, and `4010` were written directly in `relay.py` with no names. A reader had to cross-reference comments or commit history to understand what each code meant. The same applied to JSON-RPC method strings like `"channel.register"` — a typo in any consumer would produce a silent protocol mismatch.
 
@@ -20,35 +20,35 @@ Before this design, the same values were duplicated across multiple packages wit
 
 - Giving every constant a single named definition at the lowest layer that needs it
 - Making the wire protocol self-documenting — `WS_CLOSE_DUPLICATE_DEVICE` is unambiguous, `4009` is not
-- Letting `phbcli/config.py` derive its defaults from constants rather than repeating them, so `Config` and the constants can never drift apart
-- Providing a flat re-export from `phb_commons.constants` so consumers don't need to know which submodule a constant lives in
+- Letting `hirocli/config.py` derive its defaults from constants rather than repeating them, so `Config` and the constants can never drift apart
+- Providing a flat re-export from `hiro_commons.constants` so consumers don't need to know which submodule a constant lives in
 
 ## Growth considerations
 
 **New workspace services.** If a fifth service is added per workspace slot (e.g. a metrics endpoint), add `PORT_OFFSET_METRICS: int = 4` to `network.py` and bump `PORTS_PER_SLOT` to `5`. No string-searching required — every port calculation already uses the formula. (The fourth slot, offset 3, is already taken by the admin UI.)
 
-**New channel packages.** A new channel package imports from `phb_channel_sdk.constants` and gets all method names, close codes, and reconnect policy for free. It never needs to redeclare them.
+**New channel packages.** A new channel package imports from `hiro_channel_sdk.constants` and gets all method names, close codes, and reconnect policy for free. It never needs to redeclare them.
 
 **Protocol versioning.** When the wire format changes, `JSONRPC_VERSION` and the `METHOD_*` strings are the single place to update. All consumers pick up the change on the next install.
 
-**New top-level packages.** If a third server-side package is added alongside `phbcli` and `phbgateway`, it follows the same rule: package-local constants go in its own `constants.py`, shared ones go in `phb_commons`. The hierarchy does not need to change shape.
+**New top-level packages.** If a third server-side package is added alongside `hirocli` and `hirogateway`, it follows the same rule: package-local constants go in its own `constants.py`, shared ones go in `hiro_commons`. The hierarchy does not need to change shape.
 
-**Cross-language clients.** The Flutter app currently hardcodes `ws://localhost:8765` and `"devices"`. As the project grows, a small generated manifest (e.g. a JSON or Dart file produced from `phb_channel_sdk/constants.py`) can keep the mobile client in sync with the server-side source of truth without manual coordination.
+**Cross-language clients.** The Flutter app currently hardcodes `ws://localhost:8765` and `"devices"`. As the project grows, a small generated manifest (e.g. a JSON or Dart file produced from `hiro_channel_sdk/constants.py`) can keep the mobile client in sync with the server-side source of truth without manual coordination.
 
-**Submodule granularity.** The four submodules in `phb_commons.constants` (`network`, `timing`, `storage`, `domain`) are sized to group values by concern, not by consumer. If a new concern emerges (e.g. agent-specific defaults grow large enough to warrant their own file), add `agent.py` alongside the others and re-export from `__init__.py`. Existing imports are unaffected.
+**Submodule granularity.** The four submodules in `hiro_commons.constants` (`network`, `timing`, `storage`, `domain`) are sized to group values by concern, not by consumer. If a new concern emerges (e.g. agent-specific defaults grow large enough to warrant their own file), add `agent.py` alongside the others and re-export from `__init__.py`. Existing imports are unaffected.
 
 ---
 
 ## Dependency graph
 
 ```
-phbcli          phbgateway      phb-channel-*
+hirocli          hirogateway      hiro-channel-*
     │                │                │
     └────────────────┴────────────────┘
                      │
-             phb-channel-sdk          ← protocol constants
+             hiro-channel-sdk          ← protocol constants
                      │
-               phb-commons            ← infrastructure constants
+               hiro-commons            ← infrastructure constants
                └── constants/
                    ├── network.py
                    ├── timing.py
@@ -56,11 +56,11 @@ phbcli          phbgateway      phb-channel-*
                    └── domain.py
 ```
 
-Both `phbcli` and `phbgateway` depend on `phb-commons` and `phb-channel-sdk`. Channel packages depend only on `phb-channel-sdk`. This means every constant lives at the lowest layer that needs it, and flows upward — never sideways.
+Both `hirocli` and `hirogateway` depend on `hiro-commons` and `hiro-channel-sdk`. Channel packages depend only on `hiro-channel-sdk`. This means every constant lives at the lowest layer that needs it, and flows upward — never sideways.
 
 ---
 
-## Level 1 — `phb_commons.constants`
+## Level 1 — `hiro_commons.constants`
 
 Cross-cutting values consumed by more than one top-level package. Split into four submodules.
 
@@ -137,18 +137,18 @@ All constants are re-exported from the package root, so consumers can choose bet
 
 ```python
 # namespaced
-from phb_commons.constants import network
+from hiro_commons.constants import network
 network.DEFAULT_GATEWAY_PORT
 
 # flat
-from phb_commons.constants import DEFAULT_GATEWAY_PORT
+from hiro_commons.constants import DEFAULT_GATEWAY_PORT
 ```
 
 ---
 
-## Level 2 — `phb_channel_sdk.constants`
+## Level 2 — `hiro_channel_sdk.constants`
 
-Authoritative source for the JSON-RPC wire protocol and WebSocket close codes. Both `phbcli` and `phbgateway` import from here; channel packages also use it directly.
+Authoritative source for the JSON-RPC wire protocol and WebSocket close codes. Both `hirocli` and `hirogateway` import from here; channel packages also use it directly.
 
 ### JSON-RPC
 
@@ -188,7 +188,7 @@ Hiro League uses the application-reserved range `4000–4999`.
 
 | Constant | Value | Purpose |
 |---|---|---|
-| `AUTH_ROLE_DESKTOP` | `"desktop"` | Auth role for the phbcli server |
+| `AUTH_ROLE_DESKTOP` | `"desktop"` | Auth role for the hirocli server |
 | `AUTH_ROLE_DEVICE` | `"device"` | Auth role for mobile / device clients |
 | `CONTENT_TYPE_TEXT` | `"text"` | Plain-text message content type |
 | `CONTENT_TYPE_JSON` | `"json"` | JSON message content type |
@@ -202,25 +202,25 @@ Hiro League uses the application-reserved range `4000–4999`.
 
 Values that belong to exactly one package's identity and are never shared.
 
-### `phbcli/constants.py`
+### `hirocli/constants.py`
 
 | Constant | Value | Purpose |
 |---|---|---|
-| `APP_NAME` | `"phbcli"` | `platformdirs` app name for data directory |
-| `PID_FILENAME` | `"phbcli.pid"` | PID file written at startup |
-| `ENV_WORKSPACE` | `"PHB_WORKSPACE"` | Env var to override active workspace |
-| `ENV_WORKSPACE_PATH` | `"PHB_WORKSPACE_PATH"` | Env var to pass workspace path in background mode |
-|| `ENV_ADMIN_UI` | `"PHB_ADMIN_UI"` | Env var to enable admin UI in background mode |
+| `APP_NAME` | `"hirocli"` | `platformdirs` app name for data directory |
+| `PID_FILENAME` | `"hirocli.pid"` | PID file written at startup |
+| `ENV_WORKSPACE` | `"HIRO_WORKSPACE"` | Env var to override active workspace |
+| `ENV_WORKSPACE_PATH` | `"HIRO_WORKSPACE_PATH"` | Env var to pass workspace path in background mode |
+|| `ENV_ADMIN_UI` | `"HIRO_ADMIN_UI"` | Env var to enable admin UI in background mode |
 | `DEVICE_ID_PREFIX` | `"mobile-"` | Prefix for auto-generated device IDs |
 | `DEVICE_ID_SUFFIX_LENGTH` | `12` | Hex chars appended after the prefix |
 
-### `phbgateway/constants.py`
+### `hirogateway/constants.py`
 
 | Constant | Value | Purpose |
 |---|---|---|
-| `APP_NAME` | `"phbgateway"` | `platformdirs` app name for data directory |
+| `APP_NAME` | `"hirogateway"` | `platformdirs` app name for data directory |
 | `PID_FILENAME` | `"gateway.pid"` | PID file written at startup |
-| `ENV_INSTANCE` | `"PHB_GATEWAY_INSTANCE"` | Env var to override active gateway instance |
+| `ENV_INSTANCE` | `"HIRO_GATEWAY_INSTANCE"` | Env var to override active gateway instance |
 | `DEFAULT_INSTANCE_NAME` | `"default"` | Instance name used when none is specified |
 | `PAIRING_REQUEST_ID_BYTES` | `12` | Byte length for generated pairing request IDs |
 | `WS_REASON_MAX_LENGTH` | `120` | Max chars in a WebSocket close reason string |
@@ -233,10 +233,10 @@ Follow the placement rule: put the constant at the **lowest layer that needs it*
 
 | Needed by | Place it in |
 |---|---|
-| Only `phbcli` | `phbcli/constants.py` |
-| Only `phbgateway` | `phbgateway/constants.py` |
-| Only channel packages | `phb_channel_sdk/constants.py` |
-| `phbcli` **and** `phbgateway` | `phb_commons/constants/<submodule>.py` |
-| Wire protocol (any package) | `phb_channel_sdk/constants.py` |
+| Only `hirocli` | `hirocli/constants.py` |
+| Only `hirogateway` | `hirogateway/constants.py` |
+| Only channel packages | `hiro_channel_sdk/constants.py` |
+| `hirocli` **and** `hirogateway` | `hiro_commons/constants/<submodule>.py` |
+| Wire protocol (any package) | `hiro_channel_sdk/constants.py` |
 
-When adding to `phb_commons/constants/`, also add the name to the `__all__` list in `phb_commons/constants/__init__.py` so flat imports keep working.
+When adding to `hiro_commons/constants/`, also add the name to the `__all__` list in `hiro_commons/constants/__init__.py` so flat imports keep working.

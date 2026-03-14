@@ -164,7 +164,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _PhbBranding(),
+                  const _HiroBranding(),
                   const SizedBox(height: 40),
                   Form(
                     key: _formKey,
@@ -254,8 +254,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
 // ── Private widgets ──────────────────────────────────────────────────────────
 
-class _PhbBranding extends StatelessWidget {
-  const _PhbBranding();
+class _HiroBranding extends StatelessWidget {
+  const _HiroBranding();
 
   @override
   Widget build(BuildContext context) {

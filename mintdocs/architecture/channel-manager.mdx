@@ -12,7 +12,7 @@ It runs as an asyncio coroutine alongside the Communication Manager, Agent Manag
 
 ## Responsibilities
 
-**Plugin spawning** — On startup, the Channel Manager reads all enabled `ChannelConfig` entries from `<workspace>/channels/` and spawns one subprocess per channel. Each subprocess receives the local WebSocket address via `--phb-ws` and a log directory via `--log-dir`.
+**Plugin spawning** — On startup, the Channel Manager reads all enabled `ChannelConfig` entries from `<workspace>/channels/` and spawns one subprocess per channel. Each subprocess receives the local WebSocket address via `--hiro-ws` and a log directory via `--log-dir`.
 
 **Connection handling** — Plugins connect back over WebSocket using JSON-RPC 2.0. The Channel Manager accepts these connections and dispatches each incoming message by its `method` field.
 
@@ -34,7 +34,7 @@ graph TD
     WS["Start local<br/>WebSocket server"]
     SPAWN["_spawn_channels()<br/>for each enabled channel"]
     KILL["Kill stale PID<br/>from previous run"]
-    PROC["subprocess.Popen()<br/>channel command + --phb-ws"]
+    PROC["subprocess.Popen()<br/>channel command + --hiro-ws"]
     PID["Write PID to disk"]
     WAIT["Wait for stop_event"]
     STOP["Send channel.stop<br/>to all plugins"]
@@ -110,7 +110,7 @@ Each channel's configuration is stored as `<workspace>/channels/<name>.json` and
 |---|---|
 | `name` | Channel identifier, e.g. `device`, `telegram` |
 | `enabled` | Whether the channel is spawned on startup |
-| `command` | Subprocess command. Defaults to `["phb-channel-<name>"]` |
+| `command` | Subprocess command. Defaults to `["hiro-channel-<name>"]` |
 | `config` | Arbitrary key-value pairs pushed to the plugin on registration |
 | `workspace_dir` | Optional path for `uv run` dev mode |
 

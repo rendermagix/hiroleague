@@ -1,7 +1,7 @@
 graph TD
-    START["phbcli start"]
+    START["hirocli start"]
     WSS["ChannelManager starts<br/>WS server :18081"]
-    READ["reads ~/.phbcli/channels/*.json"]
+    READ["reads ~/.hirocli/channels/*.json"]
     SPAWN["subprocess.Popen per<br/>enabled channel"]
     LOGINIT["log_setup.init()"]
     TRANSPORT["PluginTransport.run()"]

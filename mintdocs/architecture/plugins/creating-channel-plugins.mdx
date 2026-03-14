@@ -12,7 +12,7 @@ For the architectural background — subprocess model, JSON-RPC protocol, and me
 
 ## Prerequisites
 
-- phbcli set up and running (`phbcli setup`, `phbcli start`)
+- hirocli set up and running (`hirocli setup`, `hirocli start`)
 - uv installed — [docs.astral.sh/uv](https://docs.astral.sh/uv)
 - Python ≥ 3.11
 
@@ -23,22 +23,22 @@ For the architectural background — subprocess model, JSON-RPC protocol, and me
 The fastest way to start is to copy the reference implementation:
 
 ```
-phbserver/
+hiroserver/
 └── channels/
-    └── phb-channel-echo/        ← copy this entire directory
+    └── hiro-channel-echo/        ← copy this entire directory
 ```
 
-Rename it `phb-channel-<yourname>/` and follow the steps below.
+Rename it `hiro-channel-<yourname>/` and follow the steps below.
 
 ---
 
 ## 1. Package structure
 
 ```
-phbserver/channels/phb-channel-telegram/
+hiroserver/channels/hiro-channel-telegram/
 ├── pyproject.toml
 └── src/
-    └── phb_channel_telegram/
+    └── hiro_channel_telegram/
         ├── __init__.py
         ├── plugin.py       ← your ChannelPlugin subclass
         └── main.py         ← CLI entry point
@@ -54,34 +54,34 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "phb-channel-telegram"
+name = "hiro-channel-telegram"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "phb-channel-sdk",
+    "hiro-channel-sdk",
     "python-telegram-bot>=21",   # or whatever the third-party SDK is
     "typer>=0.12",
 ]
 
 [project.scripts]
-phb-channel-telegram = "phb_channel_telegram.main:app"
+hiro-channel-telegram = "hiro_channel_telegram.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/phb_channel_telegram"]
+packages = ["src/hiro_channel_telegram"]
 
 [tool.uv.sources]
-phb-channel-sdk = { workspace = true }
+hiro-channel-sdk = { workspace = true }
 ```
 
 <Note>
-`[tool.uv.sources]` is required for uv to resolve `phb-channel-sdk` from the local workspace instead of PyPI.
+`[tool.uv.sources]` is required for uv to resolve `hiro-channel-sdk` from the local workspace instead of PyPI.
 </Note>
 
 ---
 
 ## 3. Implement `ChannelPlugin`
 
-Open `plugin.py` and subclass `phb_channel_sdk.ChannelPlugin`:
+Open `plugin.py` and subclass `hiro_channel_sdk.ChannelPlugin`:
 
 ```python
 from __future__ import annotations
@@ -93,7 +93,7 @@ from typing import Any
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
 
-from phb_channel_sdk import ChannelPlugin, ChannelInfo, UnifiedMessage
+from hiro_channel_sdk import ChannelPlugin, ChannelInfo, UnifiedMessage
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class TelegramChannel(ChannelPlugin):
         )
 
     async def on_configure(self, config: dict[str, Any]) -> None:
-        """Receive credentials pushed by phbcli on connect."""
+        """Receive credentials pushed by hirocli on connect."""
         self._bot_token = config["bot_token"]
 
     async def on_start(self) -> None:
@@ -135,7 +135,7 @@ class TelegramChannel(ChannelPlugin):
                     "username": msg.from_user.username,
                 },
             )
-            await self.emit(unified)  # forwards to phbcli
+            await self.emit(unified)  # forwards to hirocli
 
         self._app.add_handler(MessageHandler(filters.TEXT, _handle))
         asyncio.create_task(self._app.run_polling())
@@ -161,14 +161,14 @@ class TelegramChannel(ChannelPlugin):
 | Method | Called when | What to do |
 |---|---|---|
 | `info` (property) | registration | Return `ChannelInfo(name=..., version=..., description=...)` |
-| `on_configure(config)` | phbcli pushes credentials | Store API keys, tokens, etc. |
-| `on_start()` | plugin connects to phbcli | Start polling / set up webhooks |
-| `on_stop()` | phbcli sends stop signal | Cancel tasks, close connections |
-| `send(message)` | phbcli wants to send a message | Translate `UnifiedMessage` → third-party API call |
+| `on_configure(config)` | hirocli pushes credentials | Store API keys, tokens, etc. |
+| `on_start()` | plugin connects to hirocli | Start polling / set up webhooks |
+| `on_stop()` | hirocli sends stop signal | Cancel tasks, close connections |
+| `send(message)` | hirocli wants to send a message | Translate `UnifiedMessage` → third-party API call |
 
 ### The `emit` method
 
-`await self.emit(unified_message)` is inherited — call it whenever an inbound message arrives from the third party. The transport layer forwards it to phbcli as a `channel.receive` JSON-RPC notification automatically.
+`await self.emit(unified_message)` is inherited — call it whenever an inbound message arrives from the third party. The transport layer forwards it to hirocli as a `channel.receive` JSON-RPC notification automatically.
 
 ---
 
@@ -180,10 +180,10 @@ import logging
 import sys
 
 import typer
-from phb_channel_sdk import PluginTransport
+from hiro_channel_sdk import PluginTransport
 from .plugin import TelegramChannel
 
-app = typer.Typer(name="phb-channel-telegram", add_completion=False)
+app = typer.Typer(name="hiro-channel-telegram", add_completion=False)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -194,16 +194,16 @@ logging.basicConfig(
 
 @app.command()
 def run(
-    phb_ws: str = typer.Option(
+    hiro_ws: str = typer.Option(
         "ws://127.0.0.1:18081",
-        "--phb-ws",
-        envvar="PHB_WS",
-        help="WebSocket URL of phbcli's plugin server.",
+        "--hiro-ws",
+        envvar="HIRO_WS",
+        help="WebSocket URL of hirocli's plugin server.",
     ),
 ) -> None:
-    """Connect to phbcli and start the Telegram channel."""
+    """Connect to hirocli and start the Telegram channel."""
     plugin = TelegramChannel()
-    transport = PluginTransport(plugin, phb_ws)
+    transport = PluginTransport(plugin, hiro_ws)
     asyncio.run(transport.run())
 
 
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     app()
 ```
 
-The `--phb-ws` argument is automatically appended by `ChannelManager` when spawning the subprocess. The `envvar="PHB_WS"` allows overriding it in development without CLI args.
+The `--hiro-ws` argument is automatically appended by `ChannelManager` when spawning the subprocess. The `envvar="HIRO_WS"` allows overriding it in development without CLI args.
 
 ---
 
@@ -223,40 +223,40 @@ The `--phb-ws` argument is automatically appended by `ChannelManager` when spawn
 
     ```bash
     # The workspace root already has channels/* as a member, so just sync:
-    cd phbserver
+    cd hiroserver
     uv sync
 
-    # Register with phbcli:
-    phbcli channel setup telegram
-    # Prompts: "Command to start the 'telegram' plugin" → phb-channel-telegram
+    # Register with hirocli:
+    hirocli channel setup telegram
+    # Prompts: "Command to start the 'telegram' plugin" → hiro-channel-telegram
     ```
   </Tab>
   <Tab title="Published package">
     ```bash
-    phbcli channel install telegram
-    # Runs: uv tool install phb-channel-telegram
+    hirocli channel install telegram
+    # Runs: uv tool install hiro-channel-telegram
 
-    phbcli channel setup telegram
+    hirocli channel setup telegram
     ```
   </Tab>
 </Tabs>
 
 ### Store credentials
 
-Edit `~/.phbcli/channels/telegram.json` and add your credentials to the `config` field:
+Edit `~/.hirocli/channels/telegram.json` and add your credentials to the `config` field:
 
 ```json
 {
   "name": "telegram",
   "enabled": true,
-  "command": ["phb-channel-telegram"],
+  "command": ["hiro-channel-telegram"],
   "config": {
     "bot_token": "123456:ABC-DEF..."
   }
 }
 ```
 
-phbcli pushes this `config` dict to your plugin via `on_configure()` automatically each time the plugin connects.
+hirocli pushes this `config` dict to your plugin via `on_configure()` automatically each time the plugin connects.
 
 ---
 
@@ -264,11 +264,11 @@ phbcli pushes this `config` dict to your plugin via `on_configure()` automatical
 
 ```bash
 # Restart the server so ChannelManager spawns your new channel:
-phbcli stop
-phbcli start
+hirocli stop
+hirocli start
 
 # Check that it connected:
-phbcli channel status
+hirocli channel status
 ```
 
 Expected output:
@@ -281,7 +281,7 @@ Expected output:
 
 ---
 
-## 7. Sending events back to phbcli
+## 7. Sending events back to hirocli
 
 Beyond inbound messages you can emit structured events using `channel.event` for delivery receipts, errors, or status changes. Currently, log them via the standard logger:
 
@@ -290,7 +290,7 @@ logger.warning("Delivery failed for message %s", message.id)
 ```
 
 <Note>
-Full `channel.event` support — arbitrary structured events passed upstream to phbcli handlers — is on the roadmap.
+Full `channel.event` support — arbitrary structured events passed upstream to hirocli handlers — is on the roadmap.
 </Note>
 
 ---
@@ -311,17 +311,17 @@ Full `channel.event` support — arbitrary structured events passed upstream to 
 | `metadata` | `dict` | default `{}` | Channel-specific extras — free-form |
 | `timestamp` | `datetime` | auto | UTC, auto-generated |
 
-### `phbcli channel` commands
+### `hirocli channel` commands
 
 | Command | Description |
 |---|---|
-| `phbcli channel list` | List all configured plugins and their status |
-| `phbcli channel install <name>` | Install via `uv tool install phb-channel-<name>` |
-| `phbcli channel setup <name>` | Configure command and credentials interactively |
-| `phbcli channel enable <name>` | Enable a disabled plugin |
-| `phbcli channel disable <name>` | Disable without removing config |
-| `phbcli channel remove <name>` | Delete the plugin's config file |
-| `phbcli channel status` | Show currently connected plugins (live query) |
+| `hirocli channel list` | List all configured plugins and their status |
+| `hirocli channel install <name>` | Install via `uv tool install hiro-channel-<name>` |
+| `hirocli channel setup <name>` | Configure command and credentials interactively |
+| `hirocli channel enable <name>` | Enable a disabled plugin |
+| `hirocli channel disable <name>` | Disable without removing config |
+| `hirocli channel remove <name>` | Delete the plugin's config file |
+| `hirocli channel status` | Show currently connected plugins (live query) |
 
 ---
 
@@ -329,17 +329,17 @@ Full `channel.event` support — arbitrary structured events passed upstream to 
 
 <AccordionGroup>
   <Accordion title="Plugin not connecting">
-    - Check the subprocess is running: `phbcli status`
+    - Check the subprocess is running: `hirocli status`
     - Check the plugin logs (stdout/stderr of the subprocess)
-    - Verify the command in `~/.phbcli/channels/<name>.json` is on `PATH`
-    - Try running the plugin manually: `phb-channel-telegram --phb-ws ws://127.0.0.1:18081`
+    - Verify the command in `~/.hirocli/channels/<name>.json` is on `PATH`
+    - Try running the plugin manually: `hiro-channel-telegram --hiro-ws ws://127.0.0.1:18081`
   </Accordion>
   <Accordion title="Credentials not reaching on_configure">
     - Make sure the `config` key in the JSON file is populated (not `{}`)
     - Config is pushed immediately after `channel.register` — check your logs
   </Accordion>
   <Accordion title="Testing without a real third-party account">
-    Use the echo channel: `phbcli channel setup echo` — it reflects any outbound message back as inbound, letting you verify the full round-trip pipeline.
+    Use the echo channel: `hirocli channel setup echo` — it reflects any outbound message back as inbound, letting you verify the full round-trip pipeline.
   </Accordion>
 </AccordionGroup>
 

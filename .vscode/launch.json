@@ -5,12 +5,12 @@
         "name": "Gateway Start",
         "type": "debugpy",
         "request": "launch",
-        "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
-        "module": "phbgateway.main",
+        "python": "${workspaceFolder}\\hiroserver\\.venv\\Scripts\\python.exe",
+        "module": "hirogateway.main",
         "args": ["start", "--foreground"],
-        "cwd": "${workspaceFolder}\\phbserver",
+        "cwd": "${workspaceFolder}\\hiroserver",
         "env": {
-          "PYTHONPATH": "${workspaceFolder}\\phbserver\\gateway\\src;${workspaceFolder}\\phbserver\\phb-channel-sdk\\src"
+          "PYTHONPATH": "${workspaceFolder}\\hiroserver\\gateway\\src;${workspaceFolder}\\hiroserver\\hiro-channel-sdk\\src"
         },
         "console": "integratedTerminal",
         "justMyCode": false
@@ -19,12 +19,12 @@
         "name": "Server Start",
         "type": "debugpy",
         "request": "launch",
-        "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
-        "program": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\phbcli.exe",
+        "python": "${workspaceFolder}\\hiroserver\\.venv\\Scripts\\python.exe",
+        "program": "${workspaceFolder}\\hiroserver\\.venv\\Scripts\\hirocli.exe",
         "args": ["start", "--foreground", "--admin"],
-        "cwd": "${workspaceFolder}\\phbserver",
+        "cwd": "${workspaceFolder}\\hiroserver",
         "env": {
-          "PYTHONPATH": "${workspaceFolder}\\phbserver\\phbcli\\src;${workspaceFolder}\\phbserver\\phb-channel-sdk\\src"
+          "PYTHONPATH": "${workspaceFolder}\\hiroserver\\hirocli\\src;${workspaceFolder}\\hiroserver\\hiro-channel-sdk\\src"
         },
         "console": "integratedTerminal",
         "justMyCode": false

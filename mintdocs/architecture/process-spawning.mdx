@@ -4,7 +4,7 @@ description: "How Hiro League reliably spawns and tracks background processes ac
 icon: "terminal"
 ---
 
-Hiro League spawns several background processes: the phbcli server, gateway instances, and channel plugin subprocesses. Getting this right on Windows, under a debugger, requires a specific set of conventions. This page documents the design and the problems it solves.
+Hiro League spawns several background processes: the hirocli server, gateway instances, and channel plugin subprocesses. Getting this right on Windows, under a debugger, requires a specific set of conventions. This page documents the design and the problems it solves.
 
 ## The problem
 
@@ -18,13 +18,13 @@ This made the PID file unreliable: the parent stored the launcher PID, the child
 
 ### 2. `sys.executable` is unreliable under debuggers and entry-point scripts
 
-When VS Code launches a program through debugpy, `sys.executable` is set to the program being debugged — in this case `phbcli.exe`, an entry-point stub — not the Python interpreter. Spawning a child with `sys.executable -m phbgateway.main` then fails with `No module named phbgateway.main` because `phbcli.exe` is not a Python interpreter.
+When VS Code launches a program through debugpy, `sys.executable` is set to the program being debugged — in this case `hirocli.exe`, an entry-point stub — not the Python interpreter. Spawning a child with `sys.executable -m hirogateway.main` then fails with `No module named hirogateway.main` because `hirocli.exe` is not a Python interpreter.
 
-The same failure occurs when the parent process has a restricted `PYTHONPATH`. The VS Code launch config for the server sets a `PYTHONPATH` that includes `phbcli/src` but not `gateway/src`, so the gateway module is not findable even if the interpreter is correct.
+The same failure occurs when the parent process has a restricted `PYTHONPATH`. The VS Code launch config for the server sets a `PYTHONPATH` that includes `hirocli/src` but not `gateway/src`, so the gateway module is not findable even if the interpreter is correct.
 
 ### 3. A crashing child silently erased its own PID file
 
-The original `--foreground` path in `phbgateway.main` wrapped `_run_gateway()` in a `try/finally` and called `remove_pid()` in the `finally` block. The intent was to clean up on a clean stop. The effect was that any crash — port conflict, import error, config problem — deleted the PID file on the way out.
+The original `--foreground` path in `hirogateway.main` wrapped `_run_gateway()` in a `try/finally` and called `remove_pid()` in the `finally` block. The intent was to clean up on a clean stop. The effect was that any crash — port conflict, import error, config problem — deleted the PID file on the way out.
 
 The caller's immediate status check then found no PID file, reported the gateway as "stopped", and showed no error. The failure was completely silent because `stderr` was also sent to `DEVNULL`.
 
@@ -37,12 +37,12 @@ Three rules fix all three problems.
 Instead of resolving a Python interpreter path, use `uv`:
 
 ```python
-cmd = ["uv", "run", "--directory", str(workspace_root), "python", "-m", "phbgateway.main", ...]
+cmd = ["uv", "run", "--directory", str(workspace_root), "python", "-m", "hirogateway.main", ...]
 ```
 
 `uv run --directory` always uses the correct venv and resolves all workspace packages from `pyproject.toml` and `uv.lock`, regardless of how the parent process was launched. It is the same mechanism used by channel plugin spawning.
 
-The workspace root is found by `find_workspace_root()` in `phb_commons.process`, which walks up from the calling module's file to find the `pyproject.toml` containing `[tool.uv.workspace]`.
+The workspace root is found by `find_workspace_root()` in `hiro_commons.process`, which walks up from the calling module's file to find the `pyproject.toml` containing `[tool.uv.workspace]`.
 
 ### Rule 2 — Only the child writes the PID
 
@@ -72,7 +72,7 @@ A stale PID file from a crashed process is handled correctly: `is_running(pid)` 
 
 ### stderr goes to a log file
 
-`spawn_detached()` accepts an optional `stderr_log` path. Both gateway instances and the phbcli server pass `instance_path / "stderr.log"` or `workspace_path / "stderr.log"`. Crashes produce a readable file instead of disappearing into `DEVNULL`.
+`spawn_detached()` accepts an optional `stderr_log` path. Both gateway instances and the hirocli server pass `instance_path / "stderr.log"` or `workspace_path / "stderr.log"`. Crashes produce a readable file instead of disappearing into `DEVNULL`.
 
 ## Invariants
 
@@ -88,11 +88,11 @@ A stale PID file from a crashed process is handled correctly: `is_running(pid)` 
 
 | Module | Responsibility |
 |---|---|
-| `phb_commons/process.py` | `spawn_detached()`, `wait_for_pid()`, `find_workspace_root()`, `uv_python_cmd()` |
-| `phbgateway/service.py` | Calls `spawn_detached` + `wait_for_pid` for gateway instances |
-| `phbgateway/main.py` | Child entry point — calls `write_pid()` at startup, does not remove PID on exit |
-| `phbcli/tools/server.py` | Calls `spawn_detached` + `wait_for_pid` for the phbcli server |
-| `phbcli/runtime/server_process.py` | Calls `write_pid()` at startup; `_spawn_server()` uses `spawn_detached` for self-restart |
+| `hiro_commons/process.py` | `spawn_detached()`, `wait_for_pid()`, `find_workspace_root()`, `uv_python_cmd()` |
+| `hirogateway/service.py` | Calls `spawn_detached` + `wait_for_pid` for gateway instances |
+| `hirogateway/main.py` | Child entry point — calls `write_pid()` at startup, does not remove PID on exit |
+| `hirocli/tools/server.py` | Calls `spawn_detached` + `wait_for_pid` for the hirocli server |
+| `hirocli/runtime/server_process.py` | Calls `write_pid()` at startup; `_spawn_server()` uses `spawn_detached` for self-restart |
 
 <Warning>
 Never write the PID from the parent process after calling `spawn_detached`. On Windows, launchers and stubs mean the PID returned by `Popen` is not necessarily the PID of the running Python interpreter.
