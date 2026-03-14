@@ -1,10 +1,10 @@
 ---
 title: "Process spawning"
-description: "How PHB reliably spawns and tracks background processes across different launch contexts — including debuggers, entry-point scripts, and Task Scheduler."
+description: "How Hiro League reliably spawns and tracks background processes across different launch contexts — including debuggers, entry-point scripts, and Task Scheduler."
 icon: "terminal"
 ---
 
-PHB spawns several background processes: the phbcli server, gateway instances, and channel plugin subprocesses. Getting this right on Windows, under a debugger, requires a specific set of conventions. This page documents the design and the problems it solves.
+Hiro League spawns several background processes: the phbcli server, gateway instances, and channel plugin subprocesses. Getting this right on Windows, under a debugger, requires a specific set of conventions. This page documents the design and the problems it solves.
 
 ## The problem
 

@@ -1,12 +1,12 @@
 ---
 title: "Channel plugin architecture"
-description: "How channel plugins connect third-party messaging platforms to the PHB server."
+description: "How channel plugins connect third-party messaging platforms to the Hiro League server."
 icon: "plug"
 ---
 
-Channel plugins are the mechanism by which Private Home Box connects to third-party messaging platforms — Telegram, WhatsApp, a custom mobile app, and anything else that can send and receive messages.
+Channel plugins are the mechanism by which Hiro League connects to third-party messaging platforms — Telegram, WhatsApp, a custom mobile app, and anything else that can send and receive messages.
 
-Each plugin is a **standalone Python package** that runs as a **subprocess** managed by `phbcli`. It connects back to phbcli over a **local WebSocket** and speaks a **JSON-RPC 2.0** protocol. The plugin is entirely responsible for translating between the unified PHB message format and whatever the third party requires.
+Each plugin is a **standalone Python package** that runs as a **subprocess** managed by `phbcli`. It connects back to phbcli over a **local WebSocket** and speaks a **JSON-RPC 2.0** protocol. The plugin is entirely responsible for translating between the unified Hiro League message format and whatever the third party requires.
 
 ---
 

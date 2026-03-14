@@ -14,7 +14,7 @@ Pages are organized by tab, one folder per tab:
 
 | Folder | Tab | Contents |
 |---|---|---|
-| `phb/` | Private Home Box | CLI and Gateway reference pages |
+| `phb/` | Hiro League | CLI and Gateway reference pages |
 | `architecture/` | Architecture | Architecture overview and design pages |
 | `build/` | Build & Contribute | Design decisions, local build setup, contribution guides |
 
@@ -25,7 +25,7 @@ When creating a new page, place it in the folder that matches its tab. When link
 - Use "workspace" not "project"
 - Use "device node" not "client" or "device"
 - Use "channel" for messaging integrations (Telegram, WhatsApp, mobile app, etc.)
-- Use "Root Node" for the desktop machine running PHB
+- Use "Root Node" for the desktop machine running Hiro League
 - Use "Gateway" for the auth/routing boundary process
 
 ## Style preferences

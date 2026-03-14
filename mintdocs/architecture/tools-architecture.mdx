@@ -1,10 +1,10 @@
 ---
 title: "Tools architecture"
-description: "How PHB unifies CLI commands, AI agent tools, and web API calls through a single Tool abstraction."
+description: "How Hiro League unifies CLI commands, AI agent tools, and web API calls through a single Tool abstraction."
 icon: "wrench"
 ---
 
-Every operation in PHB — pairing a device, listing channels, revoking access — is defined exactly once as a **Tool**. The CLI, the AI agent, and the HTTP API are all thin callers that invoke the same tool. There is no "CLI version" and "API version" of a feature.
+Every operation in Hiro League — pairing a device, listing channels, revoking access — is defined exactly once as a **Tool**. The CLI, the AI agent, and the HTTP API are all thin callers that invoke the same tool. There is no "CLI version" and "API version" of a feature.
 
 ## Why this design
 

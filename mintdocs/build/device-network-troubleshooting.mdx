@@ -3,7 +3,7 @@ title: "Device/network troubleshooting"
 description: "Setup and troubleshooting steps for running the Flutter app on emulators and physical devices, with guidance on network connectivity and gateway configuration."
 ---
 
-This guide covers setup and troubleshooting for running the Flutter mobile app on Android emulators and physical devices, especially when the app must connect to the local PHB gateway over the network.
+This guide covers setup and troubleshooting for running the Flutter mobile app on Android emulators and physical devices, especially when the app must connect to the local Hiro League gateway over the network.
 
 ## Quick rules
 
@@ -90,7 +90,7 @@ Example:
 http://10.0.2.2:5000
 ```
 
-For the PHB gateway on the emulator:
+For the Hiro League gateway on the emulator:
 
 ```text
 ws://10.0.2.2:8765
@@ -171,7 +171,7 @@ Test-NetConnection -ComputerName 10.0.1.54 -Port 8765
   - the port is blocked
   - the service is bound only to localhost
 
-## PHB Gateway bind troubleshooting
+## Hiro League Gateway bind troubleshooting
 
 The most common failure is that `phbgateway` is configured to bind to `localhost:8765`.
 
@@ -297,7 +297,7 @@ If this fails, firewall or bind settings are likely still wrong.
 Run PowerShell as Administrator and allow inbound TCP on `8765`:
 
 ```powershell
-New-NetFirewallRule -DisplayName "PHB Gateway 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow
+New-NetFirewallRule -DisplayName "Hiro League Gateway 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow
 ```
 
 ### If the firewall command says access denied
@@ -468,7 +468,7 @@ Test-NetConnection -ComputerName 10.0.1.54 -Port 8765
 ### Open firewall port
 
 ```powershell
-New-NetFirewallRule -DisplayName "PHB Gateway 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow
+New-NetFirewallRule -DisplayName "Hiro League Gateway 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow
 ```
 
 ### Inspect gateway instance config
