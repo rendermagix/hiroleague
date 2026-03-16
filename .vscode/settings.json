@@ -4,5 +4,5 @@
     "python.defaultInterpreterPath": "${workspaceFolder}\\hiroserver\\.venv\\Scripts\\python.exe",
     "git.autoRepositoryDetection": "subFolders",
     "git.repositoryScanMaxDepth": 4,
-    "scm.alwaysShowRepositories": true
+    "scm.alwaysShowRepositories": true,
 }

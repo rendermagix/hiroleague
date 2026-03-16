@@ -16,6 +16,7 @@
 
 
 # Priority
+- create agent that helps market the project, looking for resources, creating content, etc...
 - add Device Name in Device Paring.
 - Clean up Message Format
 - Add ability to send Commands.

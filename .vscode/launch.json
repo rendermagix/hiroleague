@@ -72,6 +72,12 @@
         "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./dev.sh --all"
       },
       {
+        "name": "Website Dev Server",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/hiroleague-website\" && npm run dev"
+      },
+      {
         "name": "Mint Docs Start",
         "type": "node-terminal",
         "request": "launch",

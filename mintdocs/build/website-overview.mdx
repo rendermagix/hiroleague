@@ -86,9 +86,50 @@ Edit the corresponding React component in `src/components/`. The copy is inline 
 
 Add new articles as `.astro` files inside `src/pages/blog/` following the pattern of `why-we-are-building-hiroleague.astro`. Then add an entry to the `blogPosts` array at the top of `src/pages/blog/index.astro` so the article appears on the listing page.
 
+### Typography
+
+Two Google Fonts are loaded in `src/layouts/main.astro` via `<link>` tags:
+
+| Font | Role | Tailwind token |
+|---|---|---|
+| [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) | Headings (`h1`–`h6`) and UI elements | `font-sans` |
+| [Lora](https://fonts.google.com/specimen/Lora) | Body text | `font-serif` |
+
+Both are registered as CSS custom properties in `src/styles/global.css` under `@theme inline`:
+
+```css
+--font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+--font-serif: "Lora", ui-serif, Georgia, serif;
+```
+
+The base layer applies `font-serif` to `body` and `font-sans` to all heading elements. To override on a specific element, use the Tailwind utilities `font-sans` or `font-serif` directly on the component.
+
 ### Colors and brand
 
-The design token values are CSS custom properties in `src/styles/global.css` under `:root` (light) and `.dark` (dark). The amber-to-orange brand gradient is applied inline in components — search for `from-amber-500` to find all instances.
+All colors are CSS custom properties in `src/styles/global.css`. There are two layers:
+
+**Semantic UI tokens** (`:root` / `.dark`) — control shadcn/ui component states (backgrounds, borders, primary button fill, etc.):
+
+```css
+--background, --foreground, --primary, --accent, --muted, --border, ...
+```
+
+**Brand tokens** (`:root` / `.dark`) — control the amber-to-pink visual identity. To rebrand, edit only these values:
+
+| Token | Light (default) | Dark (default) | Usage |
+|---|---|---|---|
+| `--brand` | amber-500 | amber-400 | logo, badges, text accents |
+| `--brand-mid` | orange-500 | orange-400 | gradient midpoint |
+| `--brand-deep` | red-500 | red-400 | gradient endpoint |
+| `--brand-rose` | rose-600 | rose-400 | feature card 3→4 stop |
+| `--brand-pink` | pink-500 | pink-400 | feature card 4 endpoint |
+| `--brand-hover` | auto via `color-mix` | auto | button hover states |
+| `--brand-mid-hover` | auto via `color-mix` | auto | button hover states |
+| `--brand-blob` | amber-300 | amber-900 | hero background blobs |
+| `--brand-mid-blob` | orange-300 | orange-900 | hero background blobs |
+| `--brand-deep-blob` | red-300 | red-900 | hero background blobs |
+
+All tokens are mapped to Tailwind utilities in `@theme inline` (e.g. `--color-brand: var(--brand)`), so components use classes like `from-brand`, `text-brand`, `bg-brand/10`, `shadow-brand/25` — no hardcoded palette names anywhere. Dark mode variants are handled automatically by the `.dark` overrides; no `dark:` color prefixes are needed in component markup.
 
 ### Dark mode
 
