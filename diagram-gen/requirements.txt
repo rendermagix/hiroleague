@@ -1,7 +1,0 @@
-# No third-party Python deps — stdlib only (pathlib, re, subprocess, argparse).
-# The only external requirement is the Mermaid CLI (mmdc):
-#
-#   npm install -g @mermaid-js/mermaid-cli
-#
-# Verify it works:
-#   mmdc --version
