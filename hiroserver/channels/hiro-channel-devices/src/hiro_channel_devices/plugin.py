@@ -99,16 +99,16 @@ class DevicesChannel(ChannelPlugin):
         if self._gateway_ws is None:
             log.warning("Gateway not connected — dropping outbound message")
             return
-        out = {
+        out: dict = {
             "payload": message.model_dump(mode="json"),
         }
-        if message.recipient_id:
-            out["target_device_id"] = message.recipient_id
+        if message.routing.recipient_id:
+            out["target_device_id"] = message.routing.recipient_id
         log.info(
             "Forwarding message to gateway",
-            msg_id=message.id,
-            recipient=message.recipient_id or "*",
-            content_type=message.content_type,
+            msg_id=message.routing.id,
+            recipient=message.routing.recipient_id or "*",
+            items=len(message.content),
         )
         await self._gateway_ws.send(json.dumps(out))
 
@@ -224,24 +224,24 @@ class DevicesChannel(ChannelPlugin):
         # Device clocks can drift or be misconfigured — we have no control over
         # them. Using the receive time ensures messages are ordered by when the
         # server actually received them, not by whatever clock the sender runs.
-        unified.timestamp = datetime.now(timezone.utc)
+        unified.routing.timestamp = datetime.now(timezone.utc)
 
         sender_device_id = msg.get("sender_device_id")
         if isinstance(sender_device_id, str) and sender_device_id:
-            unified.sender_id = sender_device_id
-            unified.metadata = {
-                **(unified.metadata or {}),
+            unified.routing.sender_id = sender_device_id
+            unified.routing.metadata = {
+                **(unified.routing.metadata or {}),
                 "friendly_name": sender_device_id,
                 "sender_device_id": sender_device_id,
             }
 
-        unified.channel = MANDATORY_CHANNEL_NAME
-        unified.direction = "inbound"
+        unified.routing.channel = MANDATORY_CHANNEL_NAME
+        unified.routing.direction = "inbound"
         log.info(
             "Inbound message from gateway",
-            msg_id=unified.id,
-            sender=unified.sender_id,
-            content_type=unified.content_type,
+            msg_id=unified.routing.id,
+            sender=unified.routing.sender_id,
+            items=len(unified.content),
         )
         await self.emit(unified)
 

@@ -7,6 +7,7 @@ import '../../application/gateway/gateway_notifier.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/utils/logger.dart';
+import '../../data/remote/gateway/unified_message.dart';
 import '../../data/repositories/message_repository_impl.dart';
 import '../../domain/models/message/message_status.dart';
 
@@ -53,20 +54,23 @@ class MessageSendNotifier extends _$MessageSendNotifier {
         timestamp: now,
       );
 
-      // Payload must match hirocli's UnifiedMessage schema — 'channel' and 'direction'
-      // are required fields. 'channel_id' is a client-side routing concept stored
-      // in metadata so that other Flutter devices can route to the right conversation.
-      gateway.send({
-        'id': messageId,
-        'channel': AppConstants.gatewayChannelName, // required by hirocli
-        'direction': 'outbound',                    // required by hirocli
-        'content_type': 'text',
-        'body': text,
-        'sender_id': identity.deviceId,
-        'recipient_id': null,
-        'metadata': {'channel_id': channelId},
-        'timestamp': now.toIso8601String(),
-      });
+      // Build the outbound UnifiedMessage using the typed model so that
+      // toJson() is the single authoritative serialization path. If the schema
+      // changes, only UnifiedMessage.toJson() needs updating — this call site
+      // will fail at compile time if required fields are removed or renamed.
+      gateway.send(
+        UnifiedMessage(
+          routing: MessageRouting(
+            id: messageId,
+            channel: AppConstants.gatewayChannelName,
+            direction: 'outbound',
+            senderId: identity.deviceId,
+            timestamp: now.toIso8601String(),
+            metadata: {'channel_id': channelId},
+          ),
+          content: [ContentItem(contentType: 'text', body: text)],
+        ).toJson(),
+      );
 
       // Optimistic — we don't wait for a server delivery receipt.
       await repo.updateMessageStatus(messageId, MessageStatus.sent);

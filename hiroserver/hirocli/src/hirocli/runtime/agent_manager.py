@@ -1,27 +1,28 @@
 """AgentManager — LLM agent worker for hirocli.
 
 Responsibilities:
-  - Reads inbound text messages from CommunicationManager.inbound_queue.
-  - Passes each message to a LangChain v1 create_agent instance.
+  - Reads inbound messages from CommunicationManager.inbound_queue.
+  - Skips messages that contain no text content items; only the first text
+    item (or a concatenation of all text items) is passed to the agent.
+  - Passes each text message to a LangChain v1 create_agent instance.
   - Maintains per-conversation persistent memory keyed by conversation_channels.id
     (a UUID) using LangGraph's AsyncSqliteSaver checkpointer backed by workspace.db.
   - Constructs a reply UnifiedMessage and places it on the outbound queue.
   - On LLM errors, enqueues a human-readable fallback reply instead.
 
-Non-text messages (image, audio, video, etc.) are silently ignored by this
-worker; they remain unconsumed on the inbound queue only if no other consumer
-reads them first.  Currently inbound_queue has only one consumer (this worker),
-so non-text messages are drained and dropped.
+Messages with no text content items (image-only, audio-only, etc.) are silently
+ignored. They are consumed from the queue so they don't block it, but no reply
+is produced. Future workers can be added as additional consumers.
 """
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from hiro_channel_sdk.models import UnifiedMessage
+from hiro_channel_sdk.models import ContentItem, MessageRouting, UnifiedMessage
 from hiro_commons.log import Logger
 
 if TYPE_CHECKING:
@@ -36,15 +37,14 @@ _FALLBACK_ERROR_BODY = (
 
 def _make_reply(inbound: UnifiedMessage, body: str) -> UnifiedMessage:
     return UnifiedMessage(
-        id=str(uuid.uuid4()),
-        channel=inbound.channel,
-        direction="outbound",
-        sender_id="server",
-        recipient_id=inbound.sender_id,
-        content_type="text",
-        body=body,
-        metadata={},
-        timestamp=datetime.now(UTC),
+        routing=MessageRouting(
+            channel=inbound.routing.channel,
+            direction="outbound",
+            sender_id="server",
+            recipient_id=inbound.routing.sender_id,
+            metadata={},
+        ),
+        content=[ContentItem(content_type="text", body=body)],
     )
 
 
@@ -103,23 +103,29 @@ class AgentManager:
         A new conversation_channels row is created on first contact.
         """
         from ..domain.conversation_channel import get_or_create_channel
-        channel_name = f"{msg.channel}:{msg.sender_id}"
+        channel_name = f"{msg.routing.channel}:{msg.routing.sender_id}"
         channel = get_or_create_channel(self._workspace_path, channel_name)
         return channel.id
 
     async def _process(self, msg: UnifiedMessage) -> None:
         thread_id = self._resolve_thread_id(msg)
         config = {"configurable": {"thread_id": thread_id}}
+
+        # Concatenate all text content items into a single input string.
+        text_body = " ".join(
+            item.body for item in msg.content if item.content_type == "text"
+        )
+
         log.info(
             "Processing message",
-            msg_id=msg.id,
+            msg_id=msg.routing.id,
             thread=thread_id,
-            sender=msg.sender_id,
-            body_length=len(msg.body),
+            sender=msg.routing.sender_id,
+            body_length=len(text_body),
         )
         try:
             result = await self._agent.ainvoke(
-                {"messages": [{"role": "user", "content": msg.body}]},
+                {"messages": [{"role": "user", "content": text_body}]},
                 config=config,
             )
             reply_body: str = result["messages"][-1].content
@@ -136,8 +142,8 @@ class AgentManager:
         await self._comm.enqueue_outbound(reply)
         log.info(
             "Agent reply enqueued",
-            in_reply_to=msg.id,
-            reply_msg_id=reply.id,
+            in_reply_to=msg.routing.id,
+            reply_msg_id=reply.routing.id,
             thread=thread_id,
             content_length=len(reply_body),
         )
@@ -158,12 +164,13 @@ class AgentManager:
             while True:
                 msg: UnifiedMessage = await self._comm.inbound_queue.get()
                 try:
-                    if msg.content_type != "text":
+                    # Only process messages that contain at least one text content item.
+                    has_text = any(item.content_type == "text" for item in msg.content)
+                    if not has_text:
                         log.info(
-                            "Ignoring non-text message",
-                            msg_id=msg.id,
-                            content_type=msg.content_type,
-                            sender=msg.sender_id,
+                            "Ignoring message with no text content",
+                            msg_id=msg.routing.id,
+                            sender=msg.routing.sender_id,
                         )
                         continue
                     await self._process(msg)

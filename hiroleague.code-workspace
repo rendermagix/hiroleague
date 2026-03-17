@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../hiroleague-website"
+		},
+		{
+			"path": "../hiro-docs"
+		}
+	],
+	"settings": {
+		"git.autoRepositoryDetection": "subFolders"
+	}
+}

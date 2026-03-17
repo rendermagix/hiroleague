@@ -43,6 +43,9 @@ dependencies:
   # Device info (for auto-populating device name at pairing)
   device_info_plus: ^12.3.0
 
+  # Flame game engine (dot matrix experiment)
+  flame: ^1.36.0
+
   # Utils
   uuid: ^4.5.1
   drift_flutter: ^0.2.7

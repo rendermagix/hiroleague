@@ -71,13 +71,15 @@ class CommunicationManager:
             log.warning("Dropping malformed inbound message", error=str(exc))
             return
 
+        # Permission check was previously inside the except block (dead code).
+        # Moved here so it actually runs on every valid inbound message.
         try:
             _check_permissions(msg)
         except PermissionError as exc:
             log.warning(
                 "Inbound message blocked by permission check",
-                channel=msg.channel,
-                sender=msg.sender_id,
+                channel=msg.routing.channel,
+                sender=msg.routing.sender_id,
                 error=str(exc),
             )
             return
@@ -85,10 +87,10 @@ class CommunicationManager:
         self.inbound_queue.put_nowait(msg)
         log.info(
             "Inbound message queued",
-            msg_id=msg.id,
-            channel=msg.channel,
-            sender=msg.sender_id,
-            content_type=msg.content_type,
+            msg_id=msg.routing.id,
+            channel=msg.routing.channel,
+            sender=msg.routing.sender_id,
+            items=len(msg.content),
         )
 
     # ------------------------------------------------------------------
@@ -100,10 +102,10 @@ class CommunicationManager:
         await self.outbound_queue.put(msg)
         log.info(
             "Outbound message queued",
-            msg_id=msg.id,
-            channel=msg.channel,
-            recipient=msg.recipient_id,
-            content_type=msg.content_type,
+            msg_id=msg.routing.id,
+            channel=msg.routing.channel,
+            recipient=msg.routing.recipient_id,
+            items=len(msg.content),
         )
 
     async def _outbound_worker(self) -> None:
@@ -116,8 +118,8 @@ class CommunicationManager:
                 except PermissionError as exc:
                     log.warning(
                         "Outbound message blocked by permission check",
-                        channel=msg.channel,
-                        recipient=msg.recipient_id,
+                        channel=msg.routing.channel,
+                        recipient=msg.routing.recipient_id,
                         error=str(exc),
                     )
                     continue
@@ -128,13 +130,13 @@ class CommunicationManager:
 
                 log.info(
                     "Dispatching outbound message",
-                    msg_id=msg.id,
-                    channel=msg.channel,
-                    recipient=msg.recipient_id,
-                    content_type=msg.content_type,
+                    msg_id=msg.routing.id,
+                    channel=msg.routing.channel,
+                    recipient=msg.routing.recipient_id,
+                    items=len(msg.content),
                 )
                 await self._channel_manager.send_to_channel(
-                    msg.channel, msg.model_dump(mode="json")
+                    msg.routing.channel, msg.model_dump(mode="json")
                 )
             finally:
                 self.outbound_queue.task_done()

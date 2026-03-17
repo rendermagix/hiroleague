@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from .constants import CONTENT_TYPE_TEXT, JSONRPC_VERSION
+from .constants import JSONRPC_VERSION, MESSAGE_TYPE_MESSAGE
 
 
-class UnifiedMessage(BaseModel):
-    """Canonical cross-channel message format.
+class MessageRouting(BaseModel):
+    """Routing and identification envelope for a UnifiedMessage.
 
-    All channels translate their native format to and from this model.
-    ``direction`` is always the perspective of hirocli:
+    Carries who sent the message, where it came from, and where it should go.
+    ``direction`` is always from the perspective of hirocli:
       - "inbound"  — arriving FROM the third party (e.g., user sent a Telegram msg)
       - "outbound" — to be SENT TO the third party (e.g., send a Telegram reply)
     """
@@ -25,12 +25,51 @@ class UnifiedMessage(BaseModel):
     direction: str  # "inbound" | "outbound"
     sender_id: str
     recipient_id: str | None = None
-    content_type: str = CONTENT_TYPE_TEXT
-    body: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContentItem(BaseModel):
+    """A single piece of content within a UnifiedMessage.
+
+    Multiple items can be present in one message, for example a text caption
+    alongside several images and a PDF file.
+    """
+
+    content_type: str  # "text" | "image" | "audio" | "video" | "file" | "location" | …
+    body: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class UnifiedMessage(BaseModel):
+    """Canonical cross-channel message format v0.1.
+
+    Structured as two distinct concerns:
+      - ``routing``      — who/where/when: channel, direction, sender, recipient, timestamp
+      - ``content``      — ordered list of content items (text, images, audio, files, …)
+
+    ``version`` allows future parsers to handle multiple schema generations.
+    ``message_type`` identifies the communication intent. Currently only
+    ``"message"`` (content exchange) is implemented; ``"request"``,
+    ``"response"``, and ``"stream"`` are reserved for future use.
+    """
+
+    version: str = "0.1"
+    message_type: str = MESSAGE_TYPE_MESSAGE
+    routing: MessageRouting
+    content: list[ContentItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _require_content_for_message_type(self) -> Self:
+        # "message" type must carry at least one content item; future types
+        # (request, response, stream) may have different requirements.
+        if self.message_type == MESSAGE_TYPE_MESSAGE and len(self.content) < 1:
+            raise ValueError(
+                "message_type 'message' requires at least one content item"
+            )
+        return self
 
 
 class RpcRequest(BaseModel):

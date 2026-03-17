@@ -35,6 +35,12 @@ class ChannelListScreen extends ConsumerWidget {
           if (channels.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (channels.length == 1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              context.go('/app/channels/${channels.first.id}');
+            });
+            return const Center(child: CircularProgressIndicator());
+          }
           return ListView.separated(
             itemCount: channels.length,
             separatorBuilder: (_, __) => const Divider(height: 1),

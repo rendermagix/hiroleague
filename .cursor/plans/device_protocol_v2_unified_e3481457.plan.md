@@ -40,37 +40,66 @@ Abiding by the no-backward-compatibility rule.
 3. **Channel-agnostic**: The design works identically for channel-device, channel-telegram, channel-iot, or any future channel. Channel plugins translate their native protocol into UnifiedMessage.
 4. **Centralized routing**: Communication Manager is the single place that decides where a message goes.
 
-## UnifiedMessage: Two New Fields
+## UnifiedMessage: Current Structure (v0.1)
 
-Add `message_type` and `request_id` to `UnifiedMessage` in [phb-channel-sdk/models.py](phbserver/phb-channel-sdk/src/phb_channel_sdk/models.py):
+`UnifiedMessage` v0.1 has already been implemented with the following structure:
+
+```python
+class MessageRouting(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    channel: str
+    direction: str          # "inbound" | "outbound"
+    sender_id: str
+    recipient_id: str | None = None
+    timestamp: datetime = Field(...)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class ContentItem(BaseModel):
+    content_type: str       # "text" | "image" | "audio" | "video" | "file" | "location" | ...
+    body: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class UnifiedMessage(BaseModel):
+    version: str = "0.1"
+    message_type: str = MESSAGE_TYPE_MESSAGE
+    routing: MessageRouting
+    content: list[ContentItem]  # at least 1 item for message_type "message"
+```
+
+## Adding request_id for request/response
+
+To implement the request/response pattern, add `request_id` directly to `UnifiedMessage` (alongside `message_type`) since it is a protocol-level correlation field, not routing and not content:
 
 ```python
 class UnifiedMessage(BaseModel):
-    id: str = Field(default_factory=lambda: uuid4().hex)
-    message_type: str = MESSAGE_TYPE_MESSAGE   # new
-    request_id: str | None = None              # new
-    channel: str
-    direction: str
-    sender_id: str
-    recipient_id: str | None = None
-    content_type: str = CONTENT_TYPE_TEXT
-    body: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(...)
+    version: str = "0.1"
+    message_type: str = MESSAGE_TYPE_MESSAGE
+    request_id: str | None = None   # new — ties a request to its response
+    routing: MessageRouting
+    content: list[ContentItem]
 ```
 
-**Why two fields instead of overloading content_type:**
+Add to [constants.py](hiroserver/hiro-channel-sdk/src/hiro_channel_sdk/constants.py) — `MESSAGE_TYPE_*` constants are already present:
 
-`content_type` describes *what the payload is* (text, image, json). `message_type` describes *what the communication intent is* (a chat message, a request expecting a response, an event notification). These are orthogonal concerns. A request has `message_type: "request"` and `content_type: "json"`. A chat has `message_type: "message"` and `content_type: "text"`. Mixing them into one field would make routing ambiguous and prevent a command from carrying different payload types.
+```python
+MESSAGE_TYPE_MESSAGE: str = "message"    # already implemented
+MESSAGE_TYPE_REQUEST: str = "request"    # reserved
+MESSAGE_TYPE_RESPONSE: str = "response"  # reserved
+MESSAGE_TYPE_STREAM: str = "stream"      # reserved
+```
 
-**message_type values** (add to [constants.py](phbserver/phb-channel-sdk/src/phb_channel_sdk/constants.py)):
+**Why `request_id` lives on `UnifiedMessage` directly, not inside `routing`:**
 
-- `"message"` (default) -- content for consumption: chat text, images, audio, video, files
-- `"request"` -- expects a response. `request_id` is required. `body` is JSON: `{"method": "channels.list", "params": {}}`
-- `"response"` -- answer to a request. `request_id` matches the request. `body` is JSON: `{"status": "ok", "data": {...}}` or `{"status": "error", "error": {"code": "...", "message": "..."}}`
-- `"event"` -- notification, fire-and-forget. `body` is JSON: `{"event": "message.delivered", "data": {...}}`
+`routing` answers "who sent this and where does it go". `request_id` answers "which earlier message is this a response to" — it's a protocol-level correlation ID orthogonal to routing. Keeping it at the top level alongside `message_type` makes it equally visible.
 
-**request_id**: A UUID that ties a request to its response. Set by the requester, echoed by the responder. `None` for messages and events.
+**message_type values:**
+
+- `"message"` (implemented) -- content exchange: chat text, images, audio, video, files
+- `"request"` -- expects a response. `request_id` is required. `content` carries a JSON item: `{"method": "channels.list", "params": {}}`
+- `"response"` -- answer to a request. `request_id` matches the request's. `content` carries a JSON item: `{"status": "ok", "data": {...}}`
+- `"event"` -- notification, fire-and-forget. `content` carries a JSON item: `{"event": "message.delivered", "data": {...}}`
+
+**request_id**: A UUID set by the requester and echoed by the responder. `None` for `"message"` and `"event"` types.
 
 ## Routing: Communication Manager Evolution
 
@@ -148,13 +177,17 @@ The response flows back as a normal outbound UnifiedMessage:
 UnifiedMessage(
     message_type="response",
     request_id=request.request_id,
-    channel=request.channel,
-    direction="outbound",
-    sender_id="server",
-    recipient_id=request.sender_id,
-    content_type="json",
-    body=json.dumps({"status": "ok", "data": result}),
-    metadata=request.metadata,  # preserve channel_id etc.
+    routing=MessageRouting(
+        channel=request.routing.channel,
+        direction="outbound",
+        sender_id="server",
+        recipient_id=request.routing.sender_id,
+        metadata=request.routing.metadata,  # preserve channel_id etc.
+    ),
+    content=[ContentItem(
+        content_type="json",
+        body=json.dumps({"status": "ok", "data": result}),
+    )],
 )
 ```
 
@@ -173,15 +206,19 @@ When a regular message (`message_type: "message"`) fails processing, the server 
 ```python
 UnifiedMessage(
     message_type="event",
-    channel=original.channel,
-    direction="outbound",
-    sender_id="server",
-    recipient_id=original.sender_id,
-    content_type="json",
-    body=json.dumps({
-        "event": "message.error",
-        "data": {"message_id": original.id, "reason": "..."}
-    }),
+    routing=MessageRouting(
+        channel=original.routing.channel,
+        direction="outbound",
+        sender_id="server",
+        recipient_id=original.routing.sender_id,
+    ),
+    content=[ContentItem(
+        content_type="json",
+        body=json.dumps({
+            "event": "message.error",
+            "data": {"message_id": original.routing.id, "reason": "..."}
+        }),
+    )],
 )
 ```
 
@@ -249,14 +286,18 @@ End-to-end flow for the first use case:
 ```json
 {
   "payload": {
+    "version": "0.1",
     "message_type": "request",
     "request_id": "abc-123",
-    "channel": "devices",
-    "direction": "outbound",
-    "sender_id": "phone-1",
-    "content_type": "json",
-    "body": "{\"method\": \"channels.list\", \"params\": {}}",
-    "metadata": {}
+    "routing": {
+      "channel": "devices",
+      "direction": "outbound",
+      "sender_id": "phone-1",
+      "metadata": {}
+    },
+    "content": [
+      { "content_type": "json", "body": "{\"method\": \"channels.list\", \"params\": {}}" }
+    ]
   }
 }
 ```

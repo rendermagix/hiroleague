@@ -75,19 +75,19 @@
         "name": "Website Dev Server",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")/hiroleague-website\" && npm run dev"
+        "command": "cd \"$(cygpath \"${workspaceFolder:hiroleague-website}\")\" && npm run dev"
       },
       {
         "name": "Mint Docs Start",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")/mintdocs\" && mint dev"
+        "command": "cd \"$(cygpath \"${workspaceFolder:hiro-docs}\")/mintdocs\" && mint dev"
       },
       {
         "name": "Diagram Generator Start",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")\" && uv run python diagram-gen/generate.py"
+        "command": "cd \"$(cygpath \"${workspaceFolder:hiro-docs}\")\" && uv run python diagram-gen/generate.py"
       }
     ],
     "compounds": [

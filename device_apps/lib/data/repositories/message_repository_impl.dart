@@ -9,6 +9,7 @@ import '../../application/auth/auth_notifier.dart';
 import '../../application/auth/auth_state.dart';
 import '../../application/gateway/gateway_notifier.dart';
 import '../../data/remote/gateway/gateway_inbound_frame.dart';
+import '../../data/remote/gateway/unified_message.dart';
 import '../../domain/models/message/message.dart';
 import '../../domain/models/message/message_content.dart';
 import '../../domain/models/message/message_status.dart';
@@ -80,23 +81,66 @@ class MessageRepositoryImpl implements MessageRepository {
   void dispose() => _sub?.cancel();
 
   Future<void> _onInboundFrame(GatewayInboundFrame frame) async {
-    final payload = frame.payload;
-
-    final id = payload['id']?.toString();
-    final contentType = payload['content_type']?.toString();
-    final body = payload['body']?.toString();
-    final senderId =
-        payload['sender_id']?.toString() ?? frame.senderDeviceId;
-    // Ignore frames that don't carry a chat message payload (e.g. system frames).
-    if (id == null || contentType == null || body == null || body.isEmpty) {
+    // --- Fix 2: version guard ---
+    // Check version before any field access. Unknown versions likely have a
+    // different structure and would either misparse silently or throw confusing
+    // errors further down. Fail fast and visibly here instead.
+    final version = frame.payload['version']?.toString();
+    if (version != '0.1') {
+      _log.warning(
+        'Dropping frame — unsupported UnifiedMessage version',
+        fields: {'version': version, 'expected': '0.1'},
+      );
       return;
     }
 
-    // channel_id is a client-side concept stored in metadata by the sender.
-    // If absent (e.g. messages from hirocli agent), route to the default channel.
-    final metadata = payload['metadata'];
-    final channelId = (metadata is Map ? metadata['channel_id']?.toString() : null)
-        ?? AppConstants.defaultChannelId;
+    // --- Fix 3: typed parse with throwing fromJson ---
+    // Any missing or wrong-typed required field throws a FormatException with
+    // the exact field name. Caught here and logged as a WARNING so schema
+    // mismatches are immediately visible in the log rather than silent drops.
+    late UnifiedMessage msg;
+    try {
+      msg = UnifiedMessage.fromJson(frame.payload);
+    } on FormatException catch (e) {
+      _log.warning(
+        'Dropping malformed frame — schema mismatch',
+        fields: {'error': e.message},
+      );
+      return;
+    }
+
+    // Only process content-exchange messages. Future types (request, response,
+    // stream) will be handled by their own consumers.
+    if (msg.messageType != 'message') {
+      _log.debug(
+        'Ignoring non-message frame',
+        fields: {'message_type': msg.messageType, 'id': msg.routing.id},
+      );
+      return;
+    }
+
+    // Find the first text content item to store and display.
+    final textItem = msg.content.where((c) => c.contentType == 'text').firstOrNull;
+    if (textItem == null || textItem.body.isEmpty) {
+      _log.warning(
+        'Dropping frame — no text content item',
+        fields: {
+          'message_id': msg.routing.id,
+          'content_types': msg.content.map((c) => c.contentType).toList(),
+        },
+      );
+      return;
+    }
+
+    final id = msg.routing.id;
+    final senderId = msg.routing.senderId;
+    final contentType = textItem.contentType;
+    final body = textItem.body;
+
+    // channel_id is stored in routing.metadata by the sender.
+    // If absent (e.g. replies from the hirocli agent), route to the default channel.
+    final channelId =
+        msg.routing.metadata['channel_id']?.toString() ?? AppConstants.defaultChannelId;
 
     // Use the local receive time for ordering, NOT the sender's timestamp.
     // Sender clocks can drift or be misconfigured — we have no control over them.

@@ -23,22 +23,37 @@ class GatewayProtocol {
     try {
       map = (jsonDecode(raw) as Map).cast<String, dynamic>();
     } catch (e) {
-      _log.warning('Malformed frame', fields: {'error': '$e'});
+      _log.warning('Dropping frame — JSON parse failed', fields: {'error': '$e'});
       return null;
     }
 
-    // Skip system messages (auth_challenge, auth_ok, pairing_*, etc.)
+    // System messages (auth_challenge, auth_ok, pairing_*, etc.) are handled
+    // upstream by GatewayAuthHandler and the server process — not application frames.
     if (map.containsKey('type')) return null;
 
+    // From this point on, the frame is expected to be a relayed application
+    // message. Missing fields below are unexpected and warrant a warning.
     final senderDeviceId = map['sender_device_id']?.toString();
-    if (senderDeviceId == null || senderDeviceId.isEmpty) return null;
+    if (senderDeviceId == null || senderDeviceId.isEmpty) {
+      _log.warning(
+        'Dropping frame — missing sender_device_id',
+        fields: {'keys': map.keys.toList()},
+      );
+      return null;
+    }
 
-    final payload = (map['payload'] as Map?)?.cast<String, dynamic>();
-    if (payload == null || payload.isEmpty) return null;
+    final rawPayload = map['payload'];
+    if (rawPayload is! Map || rawPayload.isEmpty) {
+      _log.warning(
+        'Dropping frame — payload missing or not an object',
+        fields: {'sender': senderDeviceId, 'payload_type': rawPayload?.runtimeType},
+      );
+      return null;
+    }
 
     return GatewayInboundFrame(
       senderDeviceId: senderDeviceId,
-      payload: payload,
+      payload: rawPayload.cast<String, dynamic>(),
     );
   }
 

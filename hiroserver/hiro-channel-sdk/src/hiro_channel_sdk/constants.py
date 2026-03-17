@@ -47,11 +47,25 @@ AUTH_ROLE_DESKTOP: str = "desktop"
 AUTH_ROLE_DEVICE: str = "device"
 
 # ---------------------------------------------------------------------------
-# Message content types
+# Message types — communication intent discriminator on UnifiedMessage
+# ---------------------------------------------------------------------------
+
+MESSAGE_TYPE_MESSAGE: str = "message"    # content exchange (text, images, files…)
+MESSAGE_TYPE_REQUEST: str = "request"    # reserved — expects a response
+MESSAGE_TYPE_RESPONSE: str = "response"  # reserved — answer to a request
+MESSAGE_TYPE_STREAM: str = "stream"      # reserved — streaming chunks
+
+# ---------------------------------------------------------------------------
+# Message content types — content_type values used in ContentItem
 # ---------------------------------------------------------------------------
 
 CONTENT_TYPE_TEXT: str = "text"
 CONTENT_TYPE_JSON: str = "json"
+CONTENT_TYPE_IMAGE: str = "image"
+CONTENT_TYPE_AUDIO: str = "audio"
+CONTENT_TYPE_VIDEO: str = "video"
+CONTENT_TYPE_FILE: str = "file"
+CONTENT_TYPE_LOCATION: str = "location"
 
 # ---------------------------------------------------------------------------
 # Reconnect / backoff policy
