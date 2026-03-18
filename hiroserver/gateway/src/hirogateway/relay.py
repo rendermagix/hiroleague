@@ -144,6 +144,12 @@ async def relay_message(sender_id: str, raw: str) -> None:
     msg["sender_device_id"] = sender_id
     target_id: str | None = msg.get("target_device_id")
     msg_id = _message_id(msg)
+    log.info(
+        "Inbound message received",
+        sender_id=sender_id,
+        target_id=target_id or "*",
+        msg_id=msg_id or "-",
+    )
     out = json.dumps(msg)
 
     async with _registry_lock:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import contextvars
+import csv
+import io
 import logging
 import logging.handlers
 import sys
@@ -129,6 +131,29 @@ class _PlainRenderer:
         if kv_str:
             parts.append(" " + kv_str)
         return " ".join(parts)
+
+
+class _CsvRenderer:
+    """Renders log events as CSV rows for structured file logging.
+
+    Columns: timestamp,level,module,message,extra
+    Extra contains remaining key=value pairs joined by spaces.
+    A CSV header line is written once when the file sink is first opened.
+    """
+
+    HEADER = "timestamp,level,module,message,extra"
+
+    def __call__(self, logger, method_name, event_dict):
+        ts = event_dict.pop("ts", "")
+        level = event_dict.pop("level", "").upper()
+        module = event_dict.pop("module", "")
+        message = event_dict.pop("event", "")
+        extra = " ".join(f"{k}={v}" for k, v in event_dict.items())
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([ts, level, module, message, extra])
+        return buf.getvalue().rstrip("\r\n")
 
 
 class _NullRenderer:
@@ -329,8 +354,14 @@ class Logger:
         max_bytes: int = LOG_ROTATION_MAX_BYTES,
         backup_count: int = LOG_ROTATION_BACKUP_COUNT,
         use_json: bool = False,
+        use_csv: bool = False,
     ) -> logging.Handler:
-        """Mirror log events at or above *level* into a file."""
+        """Mirror log events at or above *level* into a file.
+
+        use_csv=True writes CSV rows (timestamp,level,module,message,extra).
+        A header line is written when a new file is created (not when appending).
+        use_json takes precedence over use_csv if both are set.
+        """
         if not cls._configured:
             cls.configure()
 
@@ -339,6 +370,9 @@ class Logger:
         directory = os.path.dirname(path)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
+
+        # Write CSV header when creating a new file (mode "w" or file does not yet exist).
+        is_new_file = mode == "w" or not os.path.exists(path)
 
         min_level = cls._determine_level(level)
         if rotate:
@@ -354,7 +388,21 @@ class Logger:
 
         handler.setLevel(min_level)
         handler.setFormatter(logging.Formatter("%(message)s"))
-        renderer = structlog.processors.JSONRenderer() if use_json else _PlainRenderer()
+
+        if use_json:
+            renderer = structlog.processors.JSONRenderer()
+        elif use_csv:
+            renderer = _CsvRenderer()
+            # Write header line only when starting a fresh file.
+            if is_new_file:
+                try:
+                    with open(path, mode, encoding="utf-8") as fh:
+                        fh.write(_CsvRenderer.HEADER + "\n")
+                except OSError:
+                    pass
+        else:
+            renderer = _PlainRenderer()
+
         _FILE_SINKS.append((min_level, handler, renderer))
         logging.getLogger().addHandler(handler)
         return handler

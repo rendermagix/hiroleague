@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 log_dir: Path | None = None
+gateway_log_dir: Path | None = None
 workspace_path: Path | None = None
 workspace_id: str | None = None
 workspace_name: str | None = None

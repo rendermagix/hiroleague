@@ -14,6 +14,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -69,11 +70,15 @@ class AgentManager:
 
         config = load_agent_config(self._workspace_path)
         system_prompt = load_system_prompt(self._workspace_path)
+        tools = to_langchain_list(all_tools())
 
         log.info(
             "Building agent",
             model=config.model,
             provider=config.provider,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            tools=len(tools),
         )
 
         model = init_chat_model(
@@ -82,8 +87,6 @@ class AgentManager:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
-
-        tools = to_langchain_list(all_tools())
 
         return create_agent(
             model=model,
@@ -138,11 +141,24 @@ class AgentManager:
             body_length=len(text_body),
         )
         try:
+            log.info(
+                "Agent model invoked",
+                thread=thread_id,
+                input_length=len(text_body),
+            )
+            _t0 = time.perf_counter()
             result = await self._agent.ainvoke(
                 {"messages": [{"role": "user", "content": text_body}]},
                 config=config,
             )
+            _elapsed_ms = int((time.perf_counter() - _t0) * 1000)
             reply_body: str = result["messages"][-1].content
+            log.info(
+                "Agent model returned",
+                thread=thread_id,
+                output_length=len(reply_body),
+                elapsed_ms=_elapsed_ms,
+            )
         except Exception as exc:
             log.error(
                 "Agent invocation error",
@@ -174,7 +190,7 @@ class AgentManager:
         # They coexist with the application tables without conflict.
         async with AsyncSqliteSaver.from_conn_string(db) as checkpointer:
             self._agent = self._build_agent(checkpointer)
-            log.info("AgentManager started")
+            log.info("AgentManager started", db=db)
             while True:
                 msg: UnifiedMessage = await self._comm.inbound_queue.get()
                 try:

@@ -44,6 +44,7 @@ def init(
         rotate=True,
         max_bytes=LOG_ROTATION_MAX_BYTES,
         backup_count=LOG_ROTATION_BACKUP_COUNT,
+        use_csv=True,
     )
 
     if log_levels:

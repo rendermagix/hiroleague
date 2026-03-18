@@ -34,6 +34,22 @@ async def run_admin_ui(
     state.log_dir = log_dir
     state.workspace_path = workspace_path
 
+    # Resolve gateway log dir from the default gateway instance so the logs page
+    # can display gateway.log alongside server and plugin logs.
+    try:
+        from hirogateway.instance import load_registry as _load_gw_registry
+        from hirogateway.config import load_config as _load_gw_config, resolve_log_dir as _gw_resolve_log_dir
+        _gw_registry = _load_gw_registry()
+        if _gw_registry.instances:
+            _gw_name = _gw_registry.default_instance or next(iter(_gw_registry.instances))
+            _gw_entry = _gw_registry.instances.get(_gw_name)
+            if _gw_entry is not None:
+                _gw_instance_path = Path(_gw_entry.path)
+                _gw_config = _load_gw_config(_gw_instance_path)
+                state.gateway_log_dir = _gw_resolve_log_dir(_gw_instance_path, _gw_config)
+    except Exception:
+        pass
+
     # Resolve the workspace id and name so pages can identify the current workspace.
     if workspace_path is not None:
         try:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/ui/theme/app_text_styles.dart';
+import '../../../../core/utils/message_formatters.dart';
 import '../../../../domain/models/message/message.dart';
 import '../../../../domain/models/message/message_content.dart';
 import 'delivery_indicator.dart';
@@ -55,7 +56,7 @@ class TextBubble extends StatelessWidget {
             children: [
               if (!isOut) ...[
                 Text(
-                  _shortId(message.senderId),
+                  MessageFormatters.shortDeviceId(message.senderId),
                   style: AppTextStyles.messageTimestamp.copyWith(
                     color: cs.primary,
                     fontWeight: FontWeight.w600,
@@ -74,7 +75,7 @@ class TextBubble extends StatelessWidget {
                 children: [
                   const Spacer(),
                   Text(
-                    _formatTime(message.timestamp),
+                    MessageFormatters.formatTime(message.timestamp),
                     style: AppTextStyles.messageTimestamp
                         .copyWith(color: metaColor),
                   ),
@@ -95,18 +96,5 @@ class TextBubble extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// Show the last 8 chars of the device-id as the sender label.
-  String _shortId(String id) {
-    if (id.length <= 8) return id;
-    return '…${id.substring(id.length - 8)}';
-  }
-
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:drift/drift.dart' show Value;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -32,10 +31,11 @@ class MessageRepositoryImpl implements MessageRepository {
     required ChannelsDao channelsDao,
     required Stream<GatewayInboundFrame> frameStream,
     required String? Function() myDeviceIdGetter,
+    required AudioStorageService audioStorage,
   })  : _messagesDao = messagesDao,
         _channelsDao = channelsDao,
         _myDeviceIdGetter = myDeviceIdGetter,
-        _audioStorage = AudioStorageService() {
+        _audioStorage = audioStorage {
     _sub = frameStream.listen(_onInboundFrame);
   }
 
@@ -201,22 +201,13 @@ class MessageRepositoryImpl implements MessageRepository {
     final myDeviceId = _myDeviceIdGetter();
     final isOutbound = myDeviceId != null && senderId == myDeviceId;
 
-    // Decode base64 audio and save locally.
+    // Decode base64 audio and save locally. AudioStorageService handles
+    // platform differences internally (file path on mobile, data URI on web).
     String? localPath;
     if (audioItem.body.isNotEmpty) {
       try {
-        final bytes = base64Decode(audioItem.body);
-        if (!kIsWeb) {
-          localPath = await _audioStorage.saveBytes(
-            messageId: id,
-            bytes: Uint8List.fromList(bytes),
-          );
-        } else {
-          localPath = await _audioStorage.saveBytes(
-            messageId: id,
-            bytes: Uint8List.fromList(bytes),
-          );
-        }
+        final bytes = Uint8List.fromList(base64Decode(audioItem.body));
+        localPath = await _audioStorage.saveBytes(messageId: id, bytes: bytes);
       } catch (e) {
         _log.warning('Failed to save inbound audio', fields: {'error': e.toString()});
       }
@@ -339,8 +330,8 @@ class MessageRepositoryImpl implements MessageRepository {
 @Riverpod(keepAlive: true)
 MessageRepository messageRepository(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
-  final gatewayNotifier =
-      ref.read(gatewayProvider.notifier);
+  final gatewayNotifier = ref.read(gatewayProvider.notifier);
+  final audioStorage = ref.read(audioStorageProvider);
 
   // Capture device ID lazily so we always check the current identity.
   String? myDeviceId() {
@@ -353,6 +344,7 @@ MessageRepository messageRepository(Ref ref) {
     channelsDao: db.channelsDao,
     frameStream: gatewayNotifier.frameStream,
     myDeviceIdGetter: myDeviceId,
+    audioStorage: audioStorage,
   );
 
   ref.onDispose(repo.dispose);

@@ -1,16 +1,12 @@
-import 'dart:async';
+import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:record/record.dart';
 
 import '../../../../application/providers.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../domain/services/audio_recording_service.dart';
-
-/// Recording state machine for the input bar.
-enum _RecordingState { idle, recording, cancelling }
 
 class MessageInputBar extends ConsumerStatefulWidget {
   const MessageInputBar({super.key, required this.channelId});
@@ -24,232 +20,193 @@ class MessageInputBar extends ConsumerStatefulWidget {
 class _MessageInputBarState extends ConsumerState<MessageInputBar>
     with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
-  final _recording = AudioRecordingService();
-
   bool _hasText = false;
-  _RecordingState _state = _RecordingState.idle;
-  int _elapsedSeconds = 0;
-  Timer? _timer;
 
-  // On web, microphone permission must be granted before the long-press gesture
-  // can start recording. This flag tracks whether we've already confirmed access.
-  bool _micPermissionGranted = false;
+  // Purely UI: pulse animation drives both the mic scale and the recording dot.
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
 
-  // Pulse animation for the mic button while recording.
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulseAnim;
+  // How far the mic + slide hint have been dragged left (0 = no drag).
+  // Clamped to [_cancelThreshold, 0]; reset to 0 on release or cancel.
+  double _dragOffset = 0.0;
 
-  // Tracks horizontal drag offset to detect slide-to-cancel.
-  double _dragStartX = 0;
-  bool _wasCancelled = false;
-
-  static const double _cancelThreshold = -80.0; // px to the left
+  // Cancel when finger drifts 1/3 of the screen width to the left.
+  double _cancelThreshold(BuildContext ctx) =>
+      -(MediaQuery.sizeOf(ctx).width / 3);
 
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() {
-      final has = _controller.text.trim().isNotEmpty;
-      if (has != _hasText) setState(() => _hasText = has);
-    });
-
-    // On mobile, permission is already managed by the OS dialog flow.
-    // On web, check if the browser has previously granted access so we skip
-    // the tap-to-unlock badge for users who already allowed the microphone.
-    if (kIsWeb) {
-      _checkWebPermissionSilently();
-    } else {
-      _micPermissionGranted = true; // mobile handles this in startRecording()
-    }
-
+    _controller.addListener(_onTextChanged);
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
+    );
     _pulseAnim = Tween<double>(begin: 1.0, end: 1.35).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
-    _pulseCtrl.stop();
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Text send
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+
+  void _onTextChanged() {
+    final has = _controller.text.trim().isNotEmpty;
+    if (has != _hasText) setState(() => _hasText = has);
+  }
 
   Future<void> _sendText() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
+    final sender = ref.read(messageSendProvider.notifier);
     try {
-      await ref.read(messageSendProvider.notifier).sendText(
-            channelId: widget.channelId,
-            text: text,
-          );
+      await sender.sendText(channelId: widget.channelId, text: text);
     } on AppException catch (e) {
-      _showError('Failed to send: ${e.message}');
+      if (mounted) _showError('${AppStrings.messageSendFailed}: ${e.message}');
     } catch (_) {
-      _showError('Failed to send message');
+      if (mounted) _showError(AppStrings.messageSendFailed);
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Recording lifecycle
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Recording gestures — delegate logic to RecordingNotifier
+  // ---------------------------------------------------------------------------
 
-  /// Silently checks if microphone permission is already granted on web.
-  /// Does NOT trigger a browser prompt — only reads the existing state.
-  Future<void> _checkWebPermissionSilently() async {
-    try {
-      final recorder = AudioRecorder();
-      final granted = await recorder.hasPermission();
-      await recorder.dispose();
-      if (granted && mounted) setState(() => _micPermissionGranted = true);
-    } catch (_) {
-      // Permission API not available or blocked — ignore, user will tap to grant.
-    }
-  }
+  void _onMicTap() => unawaited(_requestWebPermission());
 
-  /// On web the browser permission dialog blocks the long-press gesture.
-  /// We request permission on the first *tap* of the mic button so it is
-  /// granted before the user tries to hold. On mobile, permission is checked
-  /// inside [AudioRecordingService.startRecording] with a clear system dialog.
-  Future<void> _ensureWebPermission() async {
-    if (!kIsWeb || _micPermissionGranted) return;
-    try {
-      final recorder = AudioRecorder();
-      final granted = await recorder.hasPermission();
-      await recorder.dispose();
-      if (granted) {
-        setState(() => _micPermissionGranted = true);
-      } else {
-        _showError('Microphone access is required. Please allow it in your browser and try again.');
-      }
-    } catch (_) {
-      _showError('Could not request microphone permission.');
-    }
+  Future<void> _requestWebPermission() async {
+    final granted =
+        await ref.read(recordingProvider.notifier).ensureWebPermission();
+    if (!granted && mounted) _showError(AppStrings.micPermissionRequired);
   }
 
   void _onLongPressStart(LongPressStartDetails details) {
-    if (_state != _RecordingState.idle) return;
-    // On web, block the gesture until permission is confirmed.
-    if (kIsWeb && !_micPermissionGranted) {
-      _ensureWebPermission();
+    final recording = ref.read(recordingProvider);
+    if (recording is! RecordingIdle) return;
+    if (kIsWeb && !recording.webPermissionGranted) {
+      unawaited(_requestWebPermission());
       return;
     }
-    _dragStartX = details.globalPosition.dx;
-    _wasCancelled = false;
-    _startRecording();
-  }
-
-  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
-    if (_state != _RecordingState.recording) return;
-    final delta = details.globalPosition.dx - _dragStartX;
-    if (delta < _cancelThreshold) {
-      _cancelRecording();
-    }
-  }
-
-  void _onLongPressEnd(LongPressEndDetails details) {
-    if (_state == _RecordingState.recording) {
-      _stopAndSend();
-    }
+    setState(() => _dragOffset = 0.0);
+    unawaited(_startRecording());
   }
 
   Future<void> _startRecording() async {
     try {
-      await _recording.startRecording();
-    } catch (e) {
-      _showError('Could not start recording: $e');
-      return;
+      await ref.read(recordingProvider.notifier).startRecording();
+    } catch (_) {
+      if (mounted) _showError(AppStrings.recordingStartError);
     }
-    setState(() {
-      _state = _RecordingState.recording;
-      _elapsedSeconds = 0;
-    });
-    _pulseCtrl.repeat(reverse: true);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      final elapsed = _recording.elapsedMs ~/ 1000;
-      setState(() => _elapsedSeconds = elapsed);
-      if (elapsed >= 60) _stopAndSend();
-    });
-
-    // Listen for auto-stop (from the service's 60-second timer).
-    _recording.isRecording.addListener(_onRecordingStateChanged);
   }
 
-  void _onRecordingStateChanged() {
-    if (!_recording.isRecording.value && _state == _RecordingState.recording) {
-      _stopAndSend();
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+    if (ref.read(recordingProvider) is! RecordingActive) return;
+    final dx = details.offsetFromOrigin.dx;
+    final threshold = _cancelThreshold(context);
+    if (dx < threshold) {
+      // Snap back before cancelling so the button doesn't freeze off-screen.
+      setState(() => _dragOffset = 0.0);
+      unawaited(ref.read(recordingProvider.notifier).cancelRecording());
+      return;
     }
+    // Clamp to [threshold, 0] — no rightward drift beyond origin.
+    setState(() => _dragOffset = dx.clamp(threshold, 0.0));
+  }
+
+  void _onLongPressEnd(LongPressEndDetails _) {
+    setState(() => _dragOffset = 0.0);
+    unawaited(_stopAndSend());
   }
 
   Future<void> _stopAndSend() async {
-    if (_state != _RecordingState.recording) return;
-    _cleanupTimer();
-    setState(() => _state = _RecordingState.idle);
+    final recorder = ref.read(recordingProvider.notifier);
+    final sender = ref.read(messageSendProvider.notifier);
+    final result = await recorder.stopRecording();
+    if (result == null || result.durationMs < 200) return;
+    if (!mounted) return;
+    await _sendAudio(sender, result);
+  }
 
-    final result = await _recording.stopRecording();
-    if (result == null || result.durationMs < 200 || _wasCancelled) return;
-
+  Future<void> _sendAudio(
+    MessageSendNotifier sender,
+    AudioRecordingResult result,
+  ) async {
     try {
-      await ref.read(messageSendProvider.notifier).sendAudio(
-            channelId: widget.channelId,
-            recordingResult: result,
-          );
+      await sender.sendAudio(
+        channelId: widget.channelId,
+        recordingResult: result,
+      );
     } on AppException catch (e) {
-      _showError('Failed to send audio: ${e.message}');
+      if (mounted) _showError('${AppStrings.audioSendFailed}: ${e.message}');
     } catch (_) {
-      _showError('Failed to send audio');
+      if (mounted) _showError(AppStrings.audioSendFailed);
     }
   }
 
-  Future<void> _cancelRecording() async {
-    if (_state != _RecordingState.recording) return;
-    _wasCancelled = true;
-    _cleanupTimer();
-    setState(() => _state = _RecordingState.cancelling);
-    await _recording.cancelRecording();
-    if (mounted) setState(() => _state = _RecordingState.idle);
+  // ---------------------------------------------------------------------------
+  // RecordingState listener — drives pulse animation and handles auto-complete
+  // ---------------------------------------------------------------------------
+
+  void _onRecordingStateChange(RecordingState? prev, RecordingState next) {
+    if (next is RecordingCompleted) {
+      ref.read(recordingProvider.notifier).acknowledgeCompleted();
+      final result = next.result;
+      if (result != null && result.durationMs >= 200) {
+        final sender = ref.read(messageSendProvider.notifier);
+        unawaited(_sendAudio(sender, result));
+      }
+      return;
+    }
+    if (next is RecordingActive && prev is! RecordingActive) {
+      _pulseCtrl.repeat(reverse: true);
+    } else if (next is! RecordingActive && prev is RecordingActive) {
+      _pulseCtrl
+        ..stop()
+        ..reset();
+      // Guard: ensure offset is reset if recording ends without a gesture end
+      // (e.g. auto-stopped at 60 s).
+      if (mounted) setState(() => _dragOffset = 0.0);
+    }
   }
 
-  void _cleanupTimer() {
-    _timer?.cancel();
-    _timer = null;
-    _pulseCtrl.stop();
-    _pulseCtrl.reset();
-    _recording.isRecording.removeListener(_onRecordingStateChanged);
-  }
-
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Helpers
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
   void _showError(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
   }
 
-  String _formatElapsed(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Build
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
+  // The mic GestureDetector must remain at the same tree position (last child
+  // of the Row) across idle↔recording transitions so Flutter keeps the active
+  // gesture recognizer alive and preserves drag tracking.
   @override
   Widget build(BuildContext context) {
+    ref.listen<RecordingState>(recordingProvider, _onRecordingStateChange);
+
     final cs = Theme.of(context).colorScheme;
-    final gatewayState = ref.watch(gatewayProvider);
-    final isConnected = gatewayState is GatewayConnected;
+    final isConnected = ref.watch(gatewayProvider) is GatewayConnected;
+    final recordingState = ref.watch(recordingProvider);
+    final RecordingActive? activeState =
+        recordingState is RecordingActive ? recordingState : null;
+    final isRecording = activeState != null;
+    final idleState = recordingState is RecordingIdle ? recordingState : null;
+    final showPermissionBadge =
+        kIsWeb && idleState != null && !idleState.webPermissionGranted;
+
+    final threshold = _cancelThreshold(context);
+    // progress ∈ [0, 1]: 0 = no drag, 1 = at cancel threshold.
+    final dragProgress =
+        threshold != 0 ? (_dragOffset / threshold).clamp(0.0, 1.0) : 0.0;
 
     return SafeArea(
       top: false,
@@ -261,184 +218,259 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar>
             top: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
         ),
-        child: _state == _RecordingState.recording
-            ? _buildRecordingOverlay(cs, isConnected)
-            : _buildIdleBar(cs, isConnected),
+        // clipBehavior: none lets the enlarged mic overflow the bar edges.
+        clipBehavior: Clip.none,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Left side: timer when recording, text field when idle.
+            Expanded(
+              child: activeState != null
+                  ? _RecordingTimer(
+                      elapsedSeconds: activeState.elapsedSeconds,
+                      pulseAnimation: _pulseAnim,
+                    )
+                  : TextField(
+                      controller: _controller,
+                      enabled: isConnected,
+                      maxLines: 5,
+                      minLines: 1,
+                      textInputAction: TextInputAction.newline,
+                      keyboardType: TextInputType.multiline,
+                      decoration: InputDecoration(
+                        hintText: isConnected
+                            ? AppStrings.chatInputHint
+                            : AppStrings.chatConnecting,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: cs.surfaceContainerHigh,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        isDense: true,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            // Send button or mic button. Both resolve to the same tree slot —
+            // Flutter updates in-place, keeping the gesture recognizer alive.
+            if (_hasText && !isRecording)
+              AnimatedOpacity(
+                opacity: isConnected ? 1.0 : 0.5,
+                duration: const Duration(milliseconds: 150),
+                child: IconButton.filled(
+                  onPressed: (isConnected && _hasText) ? _sendText : null,
+                  icon: const Icon(Icons.send_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: (showPermissionBadge && isConnected) ? _onMicTap : null,
+                onLongPressStart: isConnected ? _onLongPressStart : null,
+                onLongPressMoveUpdate:
+                    isConnected ? _onLongPressMoveUpdate : null,
+                onLongPressEnd: isConnected ? _onLongPressEnd : null,
+                // Transform.translate moves the visual group (slide hint + mic)
+                // left with the drag without affecting layout or hit-testing.
+                child: Transform.translate(
+                  offset: Offset(_dragOffset, 0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (isRecording)
+                        _SlideToCancelHint(dragProgress: dragProgress),
+                      _MicButton(
+                        isRecording: isRecording,
+                        isConnected: isConnected,
+                        showPermissionBadge: showPermissionBadge,
+                        pulseAnimation: _pulseAnim,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildIdleBar(ColorScheme cs, bool isConnected) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _controller,
-            enabled: isConnected,
-            maxLines: 5,
-            minLines: 1,
-            textInputAction: TextInputAction.newline,
-            keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-              hintText: isConnected ? 'Type a message…' : 'Connecting to gateway…',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: cs.surfaceContainerHigh,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              isDense: true,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 150),
-          transitionBuilder: (child, anim) =>
-              ScaleTransition(scale: anim, child: child),
-          child: _hasText
-              ? AnimatedOpacity(
-                  key: const ValueKey('send'),
-                  opacity: isConnected ? 1.0 : 0.5,
-                  duration: const Duration(milliseconds: 150),
-                  child: IconButton.filled(
-                    onPressed: (isConnected && _hasText) ? _sendText : null,
-                    icon: const Icon(Icons.send_rounded),
-                    style: IconButton.styleFrom(
-                      backgroundColor: cs.primary,
-                      foregroundColor: cs.onPrimary,
-                    ),
-                  ),
-                )
-              : GestureDetector(
-                  key: const ValueKey('mic'),
-                  // On web, a plain tap requests mic permission the first time.
-                  onTap: (kIsWeb && isConnected && !_micPermissionGranted)
-                      ? _ensureWebPermission
-                      : null,
-                  onLongPressStart:
-                      isConnected ? _onLongPressStart : null,
-                  onLongPressMoveUpdate:
-                      isConnected ? _onLongPressMoveUpdate : null,
-                  onLongPressEnd:
-                      isConnected ? _onLongPressEnd : null,
-                  child: AnimatedOpacity(
-                    opacity: isConnected ? 1.0 : 0.5,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: cs.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      // Show a small badge on web until permission is confirmed.
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(Icons.mic_rounded, color: cs.onPrimary),
-                          if (kIsWeb && !_micPermissionGranted)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: cs.error,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecordingOverlay(ColorScheme cs, bool isConnected) {
-    return Row(
-      children: [
-        // Slide to cancel — left side
-        Expanded(
-          child: GestureDetector(
-            onTap: _cancelRecording,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.chevron_left_rounded,
-                  color: cs.onSurfaceVariant,
-                  size: 20,
-                ),
-                Text(
-                  'Slide to cancel',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Timer
-        Text(
-          _formatElapsed(_elapsedSeconds),
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: cs.onSurface,
-              ),
-        ),
-
-        const SizedBox(width: 12),
-
-        // Pulsing mic button
-        GestureDetector(
-          onLongPressEnd: _onLongPressEnd,
-          onLongPressMoveUpdate: _onLongPressMoveUpdate,
-          child: AnimatedBuilder(
-            animation: _pulseAnim,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: _pulseAnim.value,
-                child: child,
-              );
-            },
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: cs.error,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.error.withValues(alpha: 0.4),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Icon(Icons.mic_rounded, color: cs.onError),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
-    _recording.dispose();
-    _timer?.cancel();
     _pulseCtrl.dispose();
     super.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Named sub-widgets
+// ---------------------------------------------------------------------------
+
+/// Timer shown on the left while recording. Stays fixed; only the slide hint
+/// and mic button translate with the drag.
+class _RecordingTimer extends StatelessWidget {
+  const _RecordingTimer({
+    required this.elapsedSeconds,
+    required this.pulseAnimation,
+  });
+
+  final int elapsedSeconds;
+  final Animation<double> pulseAnimation;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final m = (elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (elapsedSeconds % 60).toString().padLeft(2, '0');
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Pulsing red dot — reuses the mic pulse animation for sync.
+        AnimatedBuilder(
+          animation: pulseAnimation,
+          builder: (_, __) => Container(
+            width: 10 * pulseAnimation.value,
+            height: 10 * pulseAnimation.value,
+            decoration:
+                BoxDecoration(color: cs.error, shape: BoxShape.circle),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$m:$s',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: cs.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "← slide to cancel" hint that sits immediately left of the mic button and
+/// moves with it. Fades and turns red as the drag approaches the threshold.
+class _SlideToCancelHint extends StatelessWidget {
+  const _SlideToCancelHint({required this.dragProgress});
+
+  /// 0 = no drag, 1 = at cancel threshold.
+  final double dragProgress;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color =
+        Color.lerp(cs.onSurfaceVariant, cs.error, dragProgress)!;
+    final opacity = (1.0 - dragProgress * 0.5).clamp(0.5, 1.0);
+
+    return Opacity(
+      opacity: opacity,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.chevron_left_rounded, color: color, size: 20),
+          Text(
+            AppStrings.slideToCancelRecording,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: color),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// Mic button — renders idle (primary colour) or recording (pulsing red, 1.5×
+/// size) state. Overflow is intentional: the parent Row has Clip.none so the
+/// enlarged button can bleed outside the bar's padding box.
+class _MicButton extends StatelessWidget {
+  const _MicButton({
+    required this.isRecording,
+    required this.isConnected,
+    required this.showPermissionBadge,
+    required this.pulseAnimation,
+  });
+
+  final bool isRecording;
+  final bool isConnected;
+  final bool showPermissionBadge;
+  final Animation<double> pulseAnimation;
+
+  // Idle size and 1.5× recording size.
+  static const double _idleSize = 48;
+  static const double _recordingSize = 72; // 48 × 1.5
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AnimatedOpacity(
+      opacity: isConnected ? 1.0 : 0.5,
+      duration: const Duration(milliseconds: 150),
+      child: isRecording ? _buildRecording(cs) : _buildIdle(cs),
+    );
+  }
+
+  Widget _buildIdle(ColorScheme cs) {
+    return Container(
+      width: _idleSize,
+      height: _idleSize,
+      decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.mic_rounded, color: cs.onPrimary),
+          if (showPermissionBadge)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration:
+                    BoxDecoration(color: cs.error, shape: BoxShape.circle),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecording(ColorScheme cs) {
+    return AnimatedBuilder(
+      animation: pulseAnimation,
+      builder: (_, child) =>
+          Transform.scale(scale: pulseAnimation.value, child: child),
+      child: Container(
+        width: _recordingSize,
+        height: _recordingSize,
+        decoration: BoxDecoration(
+          color: cs.error,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: cs.error.withValues(alpha: 0.4),
+              blurRadius: 14,
+              spreadRadius: 4,
+            ),
+          ],
+        ),
+        child: Icon(Icons.mic_rounded, color: cs.onError, size: 32),
+      ),
+    );
   }
 }

@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'audio_fetch.dart';
+
+part 'audio_storage_service.g.dart';
 
 /// Handles platform-aware persistence of audio recordings.
 ///
@@ -91,3 +94,7 @@ class AudioStorageService {
     return dir;
   }
 }
+
+// keepAlive: stateless singleton — cheap to keep alive, avoids recreation.
+@Riverpod(keepAlive: true)
+AudioStorageService audioStorage(Ref ref) => AudioStorageService();

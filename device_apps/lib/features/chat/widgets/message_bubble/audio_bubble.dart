@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/ui/theme/app_text_styles.dart';
+import '../../../../core/utils/message_formatters.dart';
 import '../../../../domain/models/message/message.dart';
 import '../../../../domain/models/message/message_content.dart';
+import '../../../../domain/models/message/message_status.dart';
 import 'delivery_indicator.dart';
 
 class AudioBubble extends StatefulWidget {
@@ -42,12 +45,13 @@ class _AudioBubbleState extends State<AudioBubble> {
     if (path == null || path.isEmpty) return;
 
     try {
-      if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) {
+      if (path.startsWith('http') ||
+          path.startsWith('blob:') ||
+          path.startsWith('data:')) {
         await _player.setUrl(path);
       } else {
         await _player.setFilePath(path);
       }
-
       final dur = _player.duration;
       if (dur != null) setState(() => _duration = dur);
     } catch (_) {
@@ -57,11 +61,9 @@ class _AudioBubbleState extends State<AudioBubble> {
     _player.durationStream.listen((d) {
       if (d != null && mounted) setState(() => _duration = d);
     });
-
     _player.positionStream.listen((p) {
       if (mounted) setState(() => _position = p);
     });
-
     _player.playerStateStream.listen((state) {
       if (!mounted) return;
       setState(() => _isPlaying = state.playing);
@@ -78,7 +80,6 @@ class _AudioBubbleState extends State<AudioBubble> {
   @override
   void didUpdateWidget(AudioBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If local path became available (inbound message saved), reload.
     if (oldWidget.content.localPath != widget.content.localPath &&
         widget.content.localPath != null) {
       _initPlayer();
@@ -100,12 +101,6 @@ class _AudioBubbleState extends State<AudioBubble> {
     _player.setSpeed(next);
   }
 
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
   @override
   void dispose() {
     _player.dispose();
@@ -125,15 +120,13 @@ class _AudioBubbleState extends State<AudioBubble> {
     final sliderInactiveColor =
         isOut ? cs.onPrimary.withValues(alpha: 0.3) : cs.outlineVariant;
 
-    final remaining = _duration > _position ? _duration - _position : Duration.zero;
+    final remaining =
+        _duration > _position ? _duration - _position : Duration.zero;
     final durationLabel = _isPlaying
-        ? _formatDuration(remaining)
-        : _formatDuration(_duration > Duration.zero
+        ? MessageFormatters.formatDuration(remaining)
+        : MessageFormatters.formatDuration(_duration > Duration.zero
             ? _duration
             : Duration(milliseconds: widget.content.durationMs));
-
-    final hasTranscript = widget.content.transcript != null &&
-        widget.content.transcript!.isNotEmpty;
 
     return Align(
       alignment: isOut ? Alignment.centerRight : Alignment.centerLeft,
@@ -165,7 +158,7 @@ class _AudioBubbleState extends State<AudioBubble> {
             children: [
               if (!isOut) ...[
                 Text(
-                  _shortId(widget.message.senderId),
+                  MessageFormatters.shortDeviceId(widget.message.senderId),
                   style: AppTextStyles.messageTimestamp.copyWith(
                     color: cs.primary,
                     fontWeight: FontWeight.w600,
@@ -173,171 +166,253 @@ class _AudioBubbleState extends State<AudioBubble> {
                 ),
                 const SizedBox(height: 4),
               ],
-
-              // Player row
-              Row(
-                children: [
-                  // Play/pause button
-                  SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        _isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: contentColor,
-                        size: 26,
-                      ),
-                      onPressed: widget.content.localPath != null
-                          ? _togglePlay
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-
-                  // Seek bar
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape:
-                            const RoundSliderThumbShape(enabledThumbRadius: 5),
-                        overlayShape:
-                            const RoundSliderOverlayShape(overlayRadius: 12),
-                        activeTrackColor: sliderActiveColor,
-                        inactiveTrackColor: sliderInactiveColor,
-                        thumbColor: sliderActiveColor,
-                        overlayColor:
-                            sliderActiveColor.withValues(alpha: 0.2),
-                      ),
-                      child: Slider(
-                        min: 0,
-                        max: _duration.inMilliseconds.toDouble().clamp(1, double.infinity),
-                        value: _position.inMilliseconds
-                            .toDouble()
-                            .clamp(0, _duration.inMilliseconds.toDouble()),
-                        onChanged: _duration > Duration.zero
-                            ? (v) => _player.seek(
-                                Duration(milliseconds: v.toInt()))
-                            : null,
-                      ),
-                    ),
-                  ),
-                ],
+              _PlayerRow(
+                isPlaying: _isPlaying,
+                hasSource: widget.content.localPath != null,
+                contentColor: contentColor,
+                sliderActiveColor: sliderActiveColor,
+                sliderInactiveColor: sliderInactiveColor,
+                position: _position,
+                duration: _duration,
+                onTogglePlay: _togglePlay,
+                onSeek: (v) =>
+                    _player.seek(Duration(milliseconds: v.toInt())),
               ),
-
-              // Meta row: duration + speed + timestamp + delivery
-              Padding(
-                padding: const EdgeInsets.only(left: 4, right: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      durationLabel,
-                      style: AppTextStyles.messageTimestamp
-                          .copyWith(color: metaColor),
-                    ),
-                    const SizedBox(width: 8),
-                    // Speed chip
-                    GestureDetector(
-                      onTap: _cycleSpeed,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: contentColor.withValues(alpha: 0.35),
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${_speed == _speed.truncateToDouble() ? _speed.toStringAsFixed(0) : _speed}x',
-                          style: AppTextStyles.messageTimestamp
-                              .copyWith(color: metaColor, fontSize: 10),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _formatTime(widget.message.timestamp),
-                      style: AppTextStyles.messageTimestamp
-                          .copyWith(color: metaColor),
-                    ),
-                    if (widget.message.isOutbound) ...[
-                      const SizedBox(width: 3),
-                      DeliveryIndicator(
-                        status: widget.message.status,
-                        readColor: isOut ? Colors.white : null,
-                        defaultColor: isOut
-                            ? Colors.white.withValues(alpha: 0.6)
-                            : null,
-                      ),
-                    ],
-                  ],
-                ),
+              _MetaRow(
+                durationLabel: durationLabel,
+                speed: _speed,
+                metaColor: metaColor,
+                contentColor: contentColor,
+                timestamp: widget.message.timestamp,
+                isOutbound: isOut,
+                status: widget.message.status,
+                onCycleSpeed: _cycleSpeed,
               ),
-
-              // Expandable transcript
-              if (hasTranscript) ...[
-                const SizedBox(height: 4),
-                GestureDetector(
-                  onTap: () =>
-                      setState(() => _transcriptExpanded = !_transcriptExpanded),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _transcriptExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                        size: 16,
-                        color: metaColor,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Transcript',
-                        style: AppTextStyles.messageTimestamp.copyWith(
-                          color: metaColor,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
+              if (widget.content.transcript != null &&
+                  widget.content.transcript!.isNotEmpty)
+                _ExpandableTranscript(
+                  transcript: widget.content.transcript!,
+                  isExpanded: _transcriptExpanded,
+                  metaColor: metaColor,
+                  contentColor: contentColor,
+                  onToggle: () => setState(
+                      () => _transcriptExpanded = !_transcriptExpanded),
                 ),
-                AnimatedCrossFade(
-                  duration: const Duration(milliseconds: 180),
-                  crossFadeState: _transcriptExpanded
-                      ? CrossFadeState.showFirst
-                      : CrossFadeState.showSecond,
-                  firstChild: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      widget.content.transcript!,
-                      style: AppTextStyles.messageBody
-                          .copyWith(color: contentColor.withValues(alpha: 0.85)),
-                    ),
-                  ),
-                  secondChild: const SizedBox.shrink(),
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  String _shortId(String id) {
-    if (id.length <= 8) return id;
-    return '…${id.substring(id.length - 8)}';
+// ---------------------------------------------------------------------------
+// Sub-widgets
+// ---------------------------------------------------------------------------
+
+class _PlayerRow extends StatelessWidget {
+  const _PlayerRow({
+    required this.isPlaying,
+    required this.hasSource,
+    required this.contentColor,
+    required this.sliderActiveColor,
+    required this.sliderInactiveColor,
+    required this.position,
+    required this.duration,
+    required this.onTogglePlay,
+    required this.onSeek,
+  });
+
+  final bool isPlaying;
+  final bool hasSource;
+  final Color contentColor;
+  final Color sliderActiveColor;
+  final Color sliderInactiveColor;
+  final Duration position;
+  final Duration duration;
+  final VoidCallback onTogglePlay;
+  final ValueChanged<double> onSeek;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: contentColor,
+              size: 26,
+            ),
+            onPressed: hasSource ? onTogglePlay : null,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              thumbShape:
+                  const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape:
+                  const RoundSliderOverlayShape(overlayRadius: 12),
+              activeTrackColor: sliderActiveColor,
+              inactiveTrackColor: sliderInactiveColor,
+              thumbColor: sliderActiveColor,
+              overlayColor: sliderActiveColor.withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              min: 0,
+              max: duration.inMilliseconds.toDouble().clamp(1, double.infinity),
+              value: position.inMilliseconds
+                  .toDouble()
+                  .clamp(0, duration.inMilliseconds.toDouble()),
+              onChanged: duration > Duration.zero ? onSeek : null,
+            ),
+          ),
+        ),
+      ],
+    );
   }
+}
 
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+class _MetaRow extends StatelessWidget {
+  const _MetaRow({
+    required this.durationLabel,
+    required this.speed,
+    required this.metaColor,
+    required this.contentColor,
+    required this.timestamp,
+    required this.isOutbound,
+    required this.status,
+    required this.onCycleSpeed,
+  });
+
+  final String durationLabel;
+  final double speed;
+  final Color metaColor;
+  final Color contentColor;
+  final DateTime timestamp;
+  final bool isOutbound;
+  final MessageStatus status;
+  final VoidCallback onCycleSpeed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            durationLabel,
+            style: AppTextStyles.messageTimestamp.copyWith(color: metaColor),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onCycleSpeed,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: contentColor.withValues(alpha: 0.35),
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${speed == speed.truncateToDouble() ? speed.toStringAsFixed(0) : speed}x',
+                style: AppTextStyles.messageTimestamp
+                    .copyWith(color: metaColor, fontSize: 10),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            MessageFormatters.formatTime(timestamp),
+            style:
+                AppTextStyles.messageTimestamp.copyWith(color: metaColor),
+          ),
+          if (isOutbound) ...[
+            const SizedBox(width: 3),
+            DeliveryIndicator(
+              status: status,
+              readColor: isOutbound ? Colors.white : null,
+              defaultColor: isOutbound
+                  ? Colors.white.withValues(alpha: 0.6)
+                  : null,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ExpandableTranscript extends StatelessWidget {
+  const _ExpandableTranscript({
+    required this.transcript,
+    required this.isExpanded,
+    required this.metaColor,
+    required this.contentColor,
+    required this.onToggle,
+  });
+
+  final String transcript;
+  final bool isExpanded;
+  final Color metaColor;
+  final Color contentColor;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: onToggle,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isExpanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                size: 16,
+                color: metaColor,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                AppStrings.transcriptLabel,
+                style: AppTextStyles.messageTimestamp.copyWith(
+                  color: metaColor,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 180),
+          crossFadeState: isExpanded
+              ? CrossFadeState.showFirst
+              : CrossFadeState.showSecond,
+          firstChild: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              transcript,
+              style: AppTextStyles.messageBody
+                  .copyWith(color: contentColor.withValues(alpha: 0.85)),
+            ),
+          ),
+          secondChild: const SizedBox.shrink(),
+        ),
+      ],
+    );
   }
 }

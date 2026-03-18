@@ -332,6 +332,9 @@ class ChannelManager:
             log.warning("Cannot send to channel — not connected", channel=channel_name)
             return
         await ch.ws.send(rpc.build_notification(METHOD_SEND, message))
+        # Log the message ID if present for end-to-end tracing.
+        msg_id = message.get("routing", {}).get("id", "-") if isinstance(message, dict) else "-"
+        log.info("Message sent to channel", channel=channel_name, msg_id=msg_id)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         for ch in list(self._channels.values()):

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../domain/models/message/message.dart';
 import '../../../../domain/models/message/message_content.dart';
 import 'audio_bubble.dart';
@@ -38,7 +39,7 @@ class _UnsupportedBubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
-          '[Unsupported content: $rawType]',
+          '[${AppStrings.unsupportedContent}: $rawType]',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onErrorContainer,
             fontSize: 13,

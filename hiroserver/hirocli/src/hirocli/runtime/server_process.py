@@ -103,6 +103,16 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
         foreground=foreground,
         log_levels=config.log_levels or None,
     )
+    log.info(
+        "Config loaded",
+        workspace=str(workspace_path),
+        http_port=config.http_port,
+        plugin_port=config.plugin_port,
+        admin_port=config.admin_port,
+        gateway_url=config.gateway_url,
+        log_dir=str(log_dir),
+    )
+
     desktop_private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
     stop_event = asyncio.Event()
     set_stop_event(stop_event)
@@ -113,6 +123,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
     tool_registry = ToolRegistry()
     tool_registry.register_all(all_tools())
     set_tool_registry(tool_registry)
+    log.info("Tool registry ready", tools=len(tool_registry._tools))
 
     # ------------------------------------------------------------------
     # Shared media services — one instance each, used by both the adapter
@@ -122,7 +133,9 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
         OpenAISTTProvider(),
         GeminiSTTProvider(),
     ])
+    log.info("STT service ready", providers=["openai", "gemini"])
     vision_service = VisionService()
+    log.info("Vision service ready")
 
     # ------------------------------------------------------------------
     # Adapter pipeline
@@ -131,6 +144,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
         AudioTranscriptionAdapter(service=stt_service),
         ImageUnderstandingAdapter(service=vision_service),
     ])
+    log.info("Adapter pipeline ready", adapters=["audio_transcription", "image_understanding"])
 
     # ------------------------------------------------------------------
     # Message handlers (constructed before CommunicationManager so they
@@ -147,6 +161,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
 
     request_handler = RequestHandler(comm_manager, workspace_path)
     comm_manager._request_handler = request_handler  # inject after both are constructed
+    log.info("Communication manager ready")
 
     # ------------------------------------------------------------------
     # Channel event handler (infrastructure: pairing, connectivity)
@@ -245,6 +260,8 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
     channel_event_handler.register("pairing_request", _handle_pairing_request)
     channel_event_handler.register("gateway_connected", _handle_gateway_connected)
     channel_event_handler.register("gateway_disconnected", _handle_gateway_disconnected)
+    log.info("Channel event handler ready",
+             events=["pairing_request", "gateway_connected", "gateway_disconnected"])
 
     # ------------------------------------------------------------------
     # Channel and communication managers
@@ -262,6 +279,20 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
 
     agent_manager = AgentManager(comm_manager, workspace_path)
 
+    # Log agent configuration at startup so the log viewer shows which model is in use.
+    try:
+        from ..domain.agent_config import load_agent_config as _load_agent_cfg
+        _agent_cfg = _load_agent_cfg(workspace_path)
+        log.info(
+            "Agent config loaded",
+            model=_agent_cfg.model,
+            provider=_agent_cfg.provider,
+            temperature=_agent_cfg.temperature,
+            max_tokens=_agent_cfg.max_tokens,
+        )
+    except Exception:
+        log.info("Agent config loaded (using defaults)")
+
     def _shutdown(*_: object) -> None:
         log.info("Shutdown signal received")
         stop_event.set()
@@ -273,7 +304,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
         signal.signal(signal.SIGINT, _shutdown)
 
     log.info(
-        "Starting hirocli server",
+        "Server startup complete — launching components",
         workspace=str(workspace_path),
         http=f"http://{config.http_host}:{config.http_port}/status",
         plugin_ws=f"ws://127.0.0.1:{config.plugin_port}",

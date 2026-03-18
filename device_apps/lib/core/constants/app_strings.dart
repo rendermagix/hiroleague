@@ -35,6 +35,30 @@ abstract final class AppStrings {
       'This will remove your gateway connection and return you to the connection screen.';
   static const String disconnectConfirmAction = 'Disconnect';
 
+  // Chat — input bar
+  static const String chatInputHint = 'Type a message\u2026';
+  static const String chatConnecting = 'Connecting to gateway\u2026';
+  static const String slideToCancelRecording = 'Slide to cancel';
+
+  // Chat — mic permission (web)
+  static const String micPermissionRequired =
+      'Microphone access is required. Please allow it in your browser and try again.';
+  static const String micPermissionError =
+      'Could not request microphone permission.';
+
+  // Chat — recording errors
+  static const String recordingStartError = 'Could not start recording';
+
+  // Chat — send errors
+  static const String messageSendFailed = 'Failed to send message';
+  static const String audioSendFailed = 'Failed to send audio';
+
+  // Chat — audio bubble
+  static const String transcriptLabel = 'Transcript';
+
+  // Chat — unsupported content
+  static const String unsupportedContent = 'Unsupported content';
+
   // Errors
   static const String errorGeneric = 'Something went wrong. Please try again.';
   static const String errorNetwork = 'Network error. Check your connection.';

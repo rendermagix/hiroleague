@@ -2,6 +2,12 @@
     "version": "0.2.0",
     "configurations": [
       {
+        "name": "Server + Gateway - Rebuild Components",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")\" && ./dev-sync.sh"
+      },
+      {
         "name": "Gateway Start",
         "type": "debugpy",
         "request": "launch",
@@ -30,24 +36,6 @@
         "justMyCode": false
       },
       {
-        "name": "Flutter - Run Web",
-        "type": "node-terminal",
-        "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./flutter_build.sh run -d chrome --web-port 63000"
-      },
-      {
-        "name": "Flutter - Run Android",
-        "type": "node-terminal",
-        "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./flutter_build.sh run -d android"
-      },
-      {
-        "name": "Flutter - List Outdated Packages",
-        "type": "node-terminal",
-        "request": "launch",
-        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./dev.sh --outdated"
-      },
-      {
         "name": "Flutter - Codegen",
         "type": "node-terminal",
         "request": "launch",
@@ -60,10 +48,28 @@
         "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./dev.sh --web"
       },
       {
+        "name": "Flutter - Run Web",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./flutter_build.sh run -d chrome --web-port 63000"
+      },
+      {
         "name": "Flutter - Build Android (arm64)",
         "type": "node-terminal",
         "request": "launch",
         "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./dev.sh --android"
+      },
+      {
+        "name": "Flutter - Run Android",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./flutter_build.sh run -d android"
+      },
+      {
+        "name": "Flutter - List Outdated Packages",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && ./dev.sh --outdated"
       },
       {
         "name": "Flutter - Build All (codegen + web + android)",
@@ -88,11 +94,11 @@
         "type": "node-terminal",
         "request": "launch",
         "command": "cd \"$(cygpath \"${workspaceFolder:hiro-docs}\")\" && uv run python diagram-gen/generate.py"
-      }
+      },
     ],
     "compounds": [
       {
-        "name": "Server + Gateway",
+        "name": "Server + Gateway - Start",
         "configurations": [
           "Gateway Start",
           "Server Start",

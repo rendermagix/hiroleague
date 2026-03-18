@@ -23,7 +23,6 @@ part 'message_send_notifier.g.dart';
 class MessageSendNotifier extends _$MessageSendNotifier {
   static const _uuid = Uuid();
   static final _log = Logger.get('MessageSendNotifier');
-  final _audioStorage = AudioStorageService();
 
   @override
   void build() {}
@@ -106,10 +105,12 @@ class MessageSendNotifier extends _$MessageSendNotifier {
 
     final repo = ref.read(messageRepositoryProvider);
     final gateway = ref.read(gatewayProvider.notifier);
+    // Captured before first await — ref must not be read across async gaps.
+    final audioStorage = ref.read(audioStorageProvider);
 
     try {
       // 1. Persist audio locally.
-      final localPath = await _audioStorage.save(
+      final localPath = await audioStorage.save(
         messageId: messageId,
         bytes: recordingResult.bytes,
         tempPath: recordingResult.tempPath,
@@ -119,7 +120,7 @@ class MessageSendNotifier extends _$MessageSendNotifier {
       // 2. Read bytes for base64 (on mobile we use what we have; on web re-read blob).
       final bytes = recordingResult.bytes.isNotEmpty
           ? recordingResult.bytes
-          : (await _audioStorage.loadBytes(localPath)) ?? recordingResult.bytes;
+          : (await audioStorage.loadBytes(localPath)) ?? recordingResult.bytes;
 
       final base64Body = base64Encode(bytes);
 

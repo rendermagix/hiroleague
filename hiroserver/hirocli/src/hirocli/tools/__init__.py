@@ -1,4 +1,5 @@
 from .base import Tool
+from .logs import LogSearchTool, LogTailTool
 from .channel import (
     ChannelDisableTool,
     ChannelEnableTool,
@@ -65,4 +66,6 @@ def all_tools() -> list[Tool]:
         GatewayTeardownTool(),
         TranscribeTool(),
         DescribeImageTool(),
+        LogSearchTool(),
+        LogTailTool(),
     ]
