@@ -68,8 +68,7 @@ class STTService:
                 self._model_to_provider[model_info.model_id] = provider
                 self._models.append(model_info)
             log.info(
-                "STT provider loaded",
-                provider=provider.name,
+                f"STT provider loaded: {provider.name}",                
                 models=[m.model_id for m in provider.supported_models()],
             )
 
@@ -82,7 +81,7 @@ class STTService:
             self._default_model = None
 
         if self._default_model:
-            log.info("STT default model", model=self._default_model)
+            log.info(f"STT default model: {self._default_model}")
         else:
             log.warning("No STT providers available — transcription disabled")
 

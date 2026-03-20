@@ -13,45 +13,43 @@ Workspace path resolution:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import signal
 import sys
-import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 from hiro_commons.log import Logger
-from hiro_commons.process import write_pid
+from hiro_commons.process import remove_pid, spawn_detached, uv_python_cmd, write_pid
 
-from hirocli.constants import DEVICE_ID_PREFIX, DEVICE_ID_SUFFIX_LENGTH, ENV_ADMIN_UI, ENV_WORKSPACE, ENV_WORKSPACE_PATH, PID_FILENAME
+from hirocli.constants import ENV_ADMIN_UI, ENV_WORKSPACE, ENV_WORKSPACE_PATH, PID_FILENAME
+from hirocli.domain.config import load_config, mark_disconnected, resolve_log_dir
+from hirocli.domain.crypto import load_or_create_master_key
+from hirocli.domain.db import ensure_db
+from hirocli.runtime.agent_manager import AgentManager
+from hirocli.runtime.channel_event_handler import ChannelEventHandler
+from hirocli.runtime.channel_manager import ChannelManager
+from hirocli.runtime.communication_manager import CommunicationManager
+from hirocli.runtime.event_handler import EventHandler
+from hirocli.runtime.http_server import (
+    get_restart_admin,
+    is_restart_requested,
+    run_http_server,
+    set_channel_info_provider,
+    set_stop_event,
+    set_tool_registry,
+    set_workspace_path,
+)
+from hirocli.runtime.infra_event_handlers import InfraEventHandlers
+from hirocli.runtime.message_adapter import MessageAdapterPipeline
+from hirocli.runtime.request_handler import RequestHandler
+from hirocli.runtime.adapters.audio_adapter import AudioTranscriptionAdapter
+from hirocli.runtime.adapters.image_adapter import ImageUnderstandingAdapter
+from hirocli.services.stt import GeminiSTTProvider, OpenAISTTProvider, STTService
+from hirocli.services.vision_service import VisionService
+from hirocli.tools import all_tools
+from hirocli.tools.registry import ToolRegistry
 
 log = Logger.get("SERVER")
-
-
-async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
-    """Forward new lines from channel-*.log files to stdout in foreground mode."""
-    positions: dict[str, int] = {}
-    while not stop_event.is_set():
-        await asyncio.sleep(0.5)
-        for log_file in sorted(log_dir.glob("channel-*.log")):
-            key = str(log_file)
-            if key not in positions:
-                try:
-                    positions[key] = log_file.stat().st_size
-                except OSError:
-                    positions[key] = 0
-                continue
-            try:
-                with log_file.open(encoding="utf-8", errors="replace") as fh:
-                    fh.seek(positions[key])
-                    chunk = fh.read()
-                    positions[key] = fh.tell()
-                if chunk:
-                    sys.stdout.write(chunk)
-                    sys.stdout.flush()
-            except OSError:
-                pass
 
 
 async def _main(
@@ -60,6 +58,9 @@ async def _main(
     workspace_name: str | None = None,
     admin: bool = False,
 ) -> None:
+
+    # Get workspace path or get out
+
     if workspace_path is None:
         ws_str = os.environ.get(ENV_WORKSPACE_PATH)
         if not ws_str:
@@ -71,41 +72,21 @@ async def _main(
     if workspace_name is None:
         workspace_name = os.environ.get(ENV_WORKSPACE) or workspace_path.name
 
-    from hirocli.domain.config import load_config, mark_connected, mark_disconnected, resolve_log_dir
-    from hirocli.domain.crypto import load_or_create_master_key
-    from hirocli.domain.db import ensure_db
-    from hirocli.domain.pairing import (
-        ApprovedDevice,
-        clear_pairing_session,
-        load_pairing_session,
-        upsert_approved_device,
-    )
-    from hirocli.runtime.agent_manager import AgentManager
-    from hirocli.runtime.channel_event_handler import ChannelEventHandler
-    from hirocli.runtime.channel_manager import ChannelManager
-    from hirocli.runtime.communication_manager import CommunicationManager
-    from hirocli.runtime.event_handler import EventHandler
-    from hirocli.runtime.http_server import (
-        run_http_server,
-        set_channel_info_provider,
-        set_stop_event,
-        set_tool_registry,
-        set_workspace_path,
-    )
-    from hirocli.runtime.message_adapter import MessageAdapterPipeline
-    from hirocli.runtime.request_handler import RequestHandler
-    from hirocli.runtime.adapters.audio_adapter import AudioTranscriptionAdapter
-    from hirocli.runtime.adapters.image_adapter import ImageUnderstandingAdapter
-    from hirocli.services.stt import GeminiSTTProvider, OpenAISTTProvider, STTService
-    from hirocli.services.vision_service import VisionService
-    from hirocli.tools import all_tools
-    from hirocli.tools.registry import ToolRegistry
+    # Load Config and Setup Logging
 
     config = load_config(workspace_path)
     log_dir = resolve_log_dir(workspace_path, config)
+
+    # Should we take these 2 lines out to module level?
+
     # Centralised routed sinks: server.log (exclude CLI.*) + cli.log (include CLI.*)
     Logger.configure(level="INFO", console=foreground)
     Logger.open_log_dir(log_dir, level="INFO")
+
+    
+    # Suppress websockets info noise ("server listening", "connection open", etc.)
+    # and bridge warnings/errors into the structured logger.
+    Logger.silence_stdlib("websockets", module="WEBSOCKET", level="WARNING")
     if config.log_levels:
         Logger.apply_level_overrides(config.log_levels)
     log.info("Hiro Server starting...", workspace=workspace_name, foreground=foreground, admin=admin)
@@ -117,8 +98,8 @@ async def _main(
         gateway_url=config.gateway_url,
         log_dir=str(log_dir),
     )
-
     desktop_private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
+
     stop_event = asyncio.Event()
     set_stop_event(stop_event)
     write_pid(workspace_path, PID_FILENAME)
@@ -128,19 +109,20 @@ async def _main(
     tool_registry = ToolRegistry()
     tool_registry.register_all(all_tools())
     set_tool_registry(tool_registry)
-    log.info("Loaded Tool Definitions", tools=len(tool_registry._tools))
+    log.info(f"Loaded Tool Definitions: ({len(tool_registry._tools)})")
 
     # ------------------------------------------------------------------
     # Shared media services — one instance each, used by both the adapter
     # pipeline and the agent/tool layer via TranscribeTool / DescribeImageTool.
     # ------------------------------------------------------------------
+    log.info("Loading Media Services")
+    log.info("== Loading Speech to Text Services")
     stt_service = STTService(providers=[
         OpenAISTTProvider(),
         GeminiSTTProvider(),
     ])
-    log.info("STT service ready", providers=["openai", "gemini"])
+    log.info("== Loading Vision Services")
     vision_service = VisionService()
-    log.info("Vision service ready")
 
     # ------------------------------------------------------------------
     # Adapter pipeline
@@ -171,102 +153,9 @@ async def _main(
     # ------------------------------------------------------------------
     # Channel event handler (infrastructure: pairing, connectivity)
     # ------------------------------------------------------------------
-    channel_manager_ref: ChannelManager | None = None
-
-    async def _handle_pairing_request(data: dict) -> None:
-        if channel_manager_ref is None:
-            return
-        request_id = data.get("request_id")
-        pairing_code = data.get("pairing_code")
-        device_public_key = data.get("device_public_key")
-        device_name_raw = data.get("device_name")
-        device_name = device_name_raw if isinstance(device_name_raw, str) and device_name_raw else None
-
-        if not isinstance(request_id, str) or not request_id:
-            return
-        if not isinstance(pairing_code, str) or not pairing_code:
-            await channel_manager_ref.send_event_to_channel(
-                "devices", "pairing_response",
-                {"request_id": request_id, "status": "rejected", "reason": "invalid_pairing_code"},
-            )
-            return
-        if not isinstance(device_public_key, str) or not device_public_key:
-            await channel_manager_ref.send_event_to_channel(
-                "devices", "pairing_response",
-                {"request_id": request_id, "status": "rejected", "reason": "invalid_device_public_key"},
-            )
-            return
-
-        session = load_pairing_session(workspace_path)
-        if session is None:
-            await channel_manager_ref.send_event_to_channel(
-                "devices", "pairing_response",
-                {"request_id": request_id, "status": "rejected", "reason": "no_active_pairing_session"},
-            )
-            return
-
-        if (not session.is_valid()) or (session.code != pairing_code):
-            await channel_manager_ref.send_event_to_channel(
-                "devices", "pairing_response",
-                {"request_id": request_id, "status": "rejected", "reason": "pairing_code_invalid_or_expired"},
-            )
-            return
-
-        from hiro_commons.attestation import create_device_attestation
-
-        device_id = f"{DEVICE_ID_PREFIX}{uuid.uuid4().hex[:DEVICE_ID_SUFFIX_LENGTH]}"
-        attestation = create_device_attestation(
-            desktop_private_key,
-            device_id=device_id,
-            device_public_key_b64=device_public_key,
-            expires_days=config.attestation_expires_days,
-        )
-        blob = json.loads(attestation["blob"])
-        expires_at_raw = blob.get("expires_at")
-        expires_at = None
-        if isinstance(expires_at_raw, str):
-            try:
-                expires_at = datetime.fromisoformat(
-                    expires_at_raw.replace("Z", "+00:00")
-                ).astimezone(UTC)
-            except Exception:
-                expires_at = None
-
-        upsert_approved_device(
-            workspace_path,
-            ApprovedDevice(
-                device_id=device_id,
-                device_public_key=device_public_key,
-                paired_at=datetime.now(UTC),
-                expires_at=expires_at,
-                metadata={"source": "gateway_pairing"},
-                device_name=device_name,
-            ),
-        )
-        clear_pairing_session(workspace_path)
-        await channel_manager_ref.send_event_to_channel(
-            "devices", "pairing_response",
-            {
-                "request_id": request_id,
-                "status": "approved",
-                "device_id": device_id,
-                "attestation": attestation,
-            },
-        )
-
-    async def _handle_gateway_connected(data: dict) -> None:
-        gateway_url = str(data.get("gateway_url") or config.gateway_url)
-        mark_connected(workspace_path, gateway_url)
-
-    async def _handle_gateway_disconnected(data: dict) -> None:
-        mark_disconnected(workspace_path)
-
+    infra_handlers = InfraEventHandlers(workspace_path, config, desktop_private_key)
     channel_event_handler = ChannelEventHandler()
-    channel_event_handler.register("pairing_request", _handle_pairing_request)
-    channel_event_handler.register("gateway_connected", _handle_gateway_connected)
-    channel_event_handler.register("gateway_disconnected", _handle_gateway_disconnected)
-    log.info("Channel event handler ready",
-             events=["pairing_request", "gateway_connected", "gateway_disconnected"])
+    infra_handlers.register_all(channel_event_handler)
 
     # ------------------------------------------------------------------
     # Channel and communication managers
@@ -278,7 +167,7 @@ async def _main(
         on_message=comm_manager.receive,
         on_event=channel_event_handler.handle,
     )
-    channel_manager_ref = channel_manager
+    infra_handlers.set_channel_manager(channel_manager)
     comm_manager.set_channel_manager(channel_manager)
     set_channel_info_provider(channel_manager.get_channel_info)
 
@@ -286,7 +175,7 @@ async def _main(
 
     # Log agent configuration at startup so the log viewer shows which model is in use.
     try:
-        from ..domain.agent_config import load_agent_config as _load_agent_cfg
+        from hirocli.domain.agent_config import load_agent_config as _load_agent_cfg
         _agent_cfg = _load_agent_cfg(workspace_path)
         log.info(
             "Agent config loaded",
@@ -322,8 +211,6 @@ async def _main(
         comm_manager.run(),
         agent_manager.run(),
     ]
-    if foreground:
-        coros.append(_tail_plugin_logs(log_dir, stop_event))
     if admin:
         from hirocli.ui.run import run_admin_ui
         coros.append(run_admin_ui(config, stop_event, log_dir=log_dir, workspace_path=workspace_path))
@@ -340,8 +227,6 @@ async def _main(
     except (asyncio.CancelledError, Exception):
         pass
 
-    from hirocli.runtime.http_server import get_restart_admin, is_restart_requested
-
     if is_restart_requested():
         log.info("Restart requested — spawning new server process")
         _spawn_server(workspace_path, admin=get_restart_admin())
@@ -356,8 +241,6 @@ def _spawn_server(workspace_path: Path, admin: bool = False) -> None:
     Uses spawn_detached from hiro_commons; the new child writes its own PID
     via write_pid() at startup, so we don't write it here.
     """
-    from hiro_commons.process import remove_pid, spawn_detached, uv_python_cmd
-
     script = str(Path(__file__))
     env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
     if admin:

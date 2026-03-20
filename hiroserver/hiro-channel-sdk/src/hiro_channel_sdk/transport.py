@@ -1,4 +1,4 @@
-"""PluginTransport — the WS bridge between a channel plugin and hirocli.
+"""PluginTransport — the WS bridge between a channel plugin and Hiro Server.
 
 Usage inside a channel's ``main.py``::
 
@@ -7,11 +7,11 @@ Usage inside a channel's ``main.py``::
     asyncio.run(transport.run())
 
 The transport:
-  1. Connects to hirocli's plugin WebSocket server.
+  1. Connects to Hiro Server's Channel Manager via websocket.
   2. Sends a ``channel.register`` notification.
-  3. Wires ``plugin.emit`` → ``channel.receive`` notifications to hirocli.
+  3. Wires ``plugin.emit`` → ``channel.receive`` notifications to Channel Manager.
   4. Calls ``plugin.on_start()`` to let the plugin begin listening.
-  5. Dispatches incoming JSON-RPC calls from hirocli to the plugin.
+  5. Dispatches incoming JSON-RPC calls from Channel Manager to the plugin.
   6. Calls ``plugin.on_stop()`` on disconnect / shutdown.
 """
 
@@ -42,13 +42,13 @@ from .constants import (
 )
 from .models import RpcRequest, RpcResponse, UnifiedMessage
 
-log = Logger.get("TRANSPORT")
+log = Logger.get("CH_TRANSPORT")
 
 RECONNECT_DELAY = RECONNECT_DELAY_SECONDS
 
 
 class PluginTransport:
-    """Manages the bidirectional JSON-RPC connection to hirocli."""
+    """Manages the bidirectional JSON-RPC connection to Channel Manager."""
 
     def __init__(self, plugin: ChannelPlugin, hiro_ws_url: str) -> None:
         self._plugin = plugin
@@ -59,7 +59,7 @@ class PluginTransport:
         self._started = False
 
     async def run(self) -> None:
-        """Connect to hirocli, register, and run the message loop.
+        """Connect to Channel Manager, register, and run the message loop.
 
         Automatically reconnects on unexpected disconnection until
         ``stop()`` is called.
@@ -71,14 +71,14 @@ class PluginTransport:
                 if self._stop_event.is_set():
                     break
                 log.warning(
-                    "Disconnected from hirocli, reconnecting",
+                    "Disconnected from Channel Manager, reconnecting",
                     delay=f"{RECONNECT_DELAY:.0f}s",
                 )
             except OSError as exc:
                 if self._stop_event.is_set():
                     break
                 log.warning(
-                    "Could not reach hirocli, reconnecting",
+                    "Could not reach Channel Manager, reconnecting",
                     error=str(exc),
                     delay=f"{RECONNECT_DELAY:.0f}s",
                 )
@@ -97,9 +97,8 @@ class PluginTransport:
 
     async def _connect_and_run(self) -> None:
         log.info(
-            "Connecting to hirocli plugin server",
-            url=self._url,
-            channel=self._plugin.info.name,
+            f"Connecting plugin {self._plugin.info.name} to Channel Manager",
+            url=self._url
         )
         async with websockets.connect(self._url) as ws:
             self._ws = ws
@@ -114,7 +113,7 @@ class PluginTransport:
                     },
                 )
             )
-            log.info("Channel registered with hirocli", channel=self._plugin.info.name)
+            log.info(f"Channel ({self._plugin.info.name}) registered with Channel Manager")
 
             async def _forward_inbound(msg: UnifiedMessage) -> None:
                 await self._notify(METHOD_RECEIVE, msg.model_dump(mode="json"))
@@ -143,7 +142,7 @@ class PluginTransport:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            log.warning("Invalid JSON from hirocli", raw=raw[:200])
+            log.warning(f"Invalid JSON from Channel Manager: {raw[:200]}")
             return
 
         if "method" in data:
@@ -205,8 +204,7 @@ class PluginTransport:
 
         except Exception as exc:
             log.error(
-                "Error handling RPC method",
-                method=req.method,
+                f"Error handling RPC method ({req.method})",
                 error=str(exc),
                 exc_info=True,
             )
@@ -234,9 +232,9 @@ class PluginTransport:
     async def request(
         self, method: str, params: dict[str, Any] | None = None
     ) -> Any:
-        """Send a JSON-RPC request to hirocli and await the response."""
+        """Send a JSON-RPC request to Channel Manager and await the response."""
         if self._ws is None:
-            raise RuntimeError("Not connected to hirocli")
+            raise RuntimeError("Not connected to Channel Manager")
         request_id = uuid4().hex
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Any] = loop.create_future()

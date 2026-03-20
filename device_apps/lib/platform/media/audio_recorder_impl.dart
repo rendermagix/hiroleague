@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:app_settings/app_settings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' as rec;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/services/audio_recording_service.dart';
+import 'has_mic_device.dart' as mic_detect;
 
 part 'audio_recorder_impl.g.dart';
 
@@ -32,8 +34,30 @@ class AudioRecorderImpl implements AudioRecorder {
 
   static const int _maxDurationMs = 60000;
 
+  // Cached after the first probe so subsequent recordings skip the async
+  // isEncoderSupported() round-trips (codec support doesn't change mid-session).
+  rec.AudioEncoder? _cachedEncoder;
+
   @override
-  Future<bool> hasPermission() => _recorder.hasPermission();
+  Future<MicPermissionStatus> checkPermissionStatus() async {
+    final granted = await _recorder.hasPermission(request: false);
+    return granted ? MicPermissionStatus.granted : MicPermissionStatus.denied;
+  }
+
+  @override
+  Future<MicPermissionStatus> requestPermission() async {
+    final granted = await _recorder.hasPermission(request: true);
+    return granted ? MicPermissionStatus.granted : MicPermissionStatus.denied;
+  }
+
+  @override
+  Future<void> openPermissionSettings() async {
+    if (kIsWeb) return;
+    AppSettings.openAppSettings();
+  }
+
+  @override
+  Future<bool> hasMicrophoneDevice() => mic_detect.hasMicDevice();
 
   /// Returns the best supported encoder for the current platform.
   ///
@@ -43,23 +67,30 @@ class AudioRecorderImpl implements AudioRecorder {
   ///   - wav               → universal fallback (large files)
   /// We probe in preference order so the most efficient supported codec wins.
   Future<rec.AudioEncoder> _chooseEncoder() async {
-    if (!kIsWeb) return rec.AudioEncoder.aacLc;
+    if (_cachedEncoder != null) return _cachedEncoder!;
+    if (!kIsWeb) {
+      _cachedEncoder = rec.AudioEncoder.aacLc;
+      return _cachedEncoder!;
+    }
     for (final encoder in const [
       rec.AudioEncoder.opus,
       rec.AudioEncoder.aacLc,
       rec.AudioEncoder.wav,
     ]) {
-      if (await _recorder.isEncoderSupported(encoder)) return encoder;
+      if (await _recorder.isEncoderSupported(encoder)) {
+        _cachedEncoder = encoder;
+        return encoder;
+      }
     }
-    return rec.AudioEncoder.opus; // should never reach here
+    _cachedEncoder = rec.AudioEncoder.opus; // should never reach here
+    return _cachedEncoder!;
   }
 
   @override
   Future<void> startRecording() async {
-    if (!kIsWeb) {
-      final granted = await _recorder.hasPermission();
-      if (!granted) throw Exception('Microphone permission denied');
-    }
+    // Permission is already verified by the UI layer (RecordingNotifier /
+    // MessageInputBar) before reaching here — skip the redundant async
+    // round-trip to keep recording start snappy.
 
     final encoder = await _chooseEncoder();
     final config = rec.RecordConfig(

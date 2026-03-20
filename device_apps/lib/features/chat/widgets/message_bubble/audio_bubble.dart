@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../../application/audio/active_audio_notifier.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/ui/theme/app_text_styles.dart';
 import '../../../../core/utils/message_formatters.dart';
@@ -9,7 +11,7 @@ import '../../../../domain/models/message/message_content.dart';
 import '../../../../domain/models/message/message_status.dart';
 import 'delivery_indicator.dart';
 
-class AudioBubble extends StatefulWidget {
+class AudioBubble extends ConsumerStatefulWidget {
   const AudioBubble({
     super.key,
     required this.message,
@@ -20,10 +22,11 @@ class AudioBubble extends StatefulWidget {
   final AudioContent content;
 
   @override
-  State<AudioBubble> createState() => _AudioBubbleState();
+  ConsumerState<AudioBubble> createState() => _AudioBubbleState();
 }
 
-class _AudioBubbleState extends State<AudioBubble> {
+class _AudioBubbleState extends ConsumerState<AudioBubble>
+    with WidgetsBindingObserver {
   late final AudioPlayer _player;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
@@ -31,11 +34,12 @@ class _AudioBubbleState extends State<AudioBubble> {
   double _speed = 1.0;
   bool _transcriptExpanded = false;
 
-  static const _speeds = [1.0, 1.5, 2.0];
+  static const _speeds = [0.5, 1.0, 1.5, 2.0];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _player = AudioPlayer();
     _initPlayer();
   }
@@ -68,6 +72,8 @@ class _AudioBubbleState extends State<AudioBubble> {
       if (!mounted) return;
       setState(() => _isPlaying = state.playing);
       if (state.processingState == ProcessingState.completed) {
+        // stop() sets playing=false before the seek, preventing auto-restart
+        _player.stop();
         _player.seek(Duration.zero);
         setState(() {
           _isPlaying = false;
@@ -90,6 +96,8 @@ class _AudioBubbleState extends State<AudioBubble> {
     if (_isPlaying) {
       await _player.pause();
     } else {
+      // Pause any other playing audio before starting this one.
+      ref.read(activeAudioProvider).claim(_player);
       await _player.play();
     }
   }
@@ -102,7 +110,17 @@ class _AudioBubbleState extends State<AudioBubble> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      if (_isPlaying) _player.pause();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ref.read(activeAudioProvider).release(_player);
     _player.dispose();
     super.dispose();
   }
@@ -174,19 +192,19 @@ class _AudioBubbleState extends State<AudioBubble> {
                 sliderInactiveColor: sliderInactiveColor,
                 position: _position,
                 duration: _duration,
+                speed: _speed,
+                metaColor: metaColor,
                 onTogglePlay: _togglePlay,
                 onSeek: (v) =>
                     _player.seek(Duration(milliseconds: v.toInt())),
+                onCycleSpeed: _cycleSpeed,
               ),
               _MetaRow(
                 durationLabel: durationLabel,
-                speed: _speed,
                 metaColor: metaColor,
-                contentColor: contentColor,
                 timestamp: widget.message.timestamp,
                 isOutbound: isOut,
                 status: widget.message.status,
-                onCycleSpeed: _cycleSpeed,
               ),
               if (widget.content.transcript != null &&
                   widget.content.transcript!.isNotEmpty)
@@ -219,8 +237,11 @@ class _PlayerRow extends StatelessWidget {
     required this.sliderInactiveColor,
     required this.position,
     required this.duration,
+    required this.speed,
+    required this.metaColor,
     required this.onTogglePlay,
     required this.onSeek,
+    required this.onCycleSpeed,
   });
 
   final bool isPlaying;
@@ -230,8 +251,11 @@ class _PlayerRow extends StatelessWidget {
   final Color sliderInactiveColor;
   final Duration position;
   final Duration duration;
+  final double speed;
+  final Color metaColor;
   final VoidCallback onTogglePlay;
   final ValueChanged<double> onSeek;
+  final VoidCallback onCycleSpeed;
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +298,24 @@ class _PlayerRow extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onCycleSpeed,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: contentColor.withValues(alpha: 0.35),
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${speed == speed.truncateToDouble() ? speed.toStringAsFixed(0) : speed}x',
+              style: AppTextStyles.messageTimestamp
+                  .copyWith(color: metaColor, fontSize: 10),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -282,23 +324,17 @@ class _PlayerRow extends StatelessWidget {
 class _MetaRow extends StatelessWidget {
   const _MetaRow({
     required this.durationLabel,
-    required this.speed,
     required this.metaColor,
-    required this.contentColor,
     required this.timestamp,
     required this.isOutbound,
     required this.status,
-    required this.onCycleSpeed,
   });
 
   final String durationLabel;
-  final double speed;
   final Color metaColor;
-  final Color contentColor;
   final DateTime timestamp;
   final bool isOutbound;
   final MessageStatus status;
-  final VoidCallback onCycleSpeed;
 
   @override
   Widget build(BuildContext context) {
@@ -310,25 +346,6 @@ class _MetaRow extends StatelessWidget {
           Text(
             durationLabel,
             style: AppTextStyles.messageTimestamp.copyWith(color: metaColor),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: onCycleSpeed,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: contentColor.withValues(alpha: 0.35),
-                ),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '${speed == speed.truncateToDouble() ? speed.toStringAsFixed(0) : speed}x',
-                style: AppTextStyles.messageTimestamp
-                    .copyWith(color: metaColor, fontSize: 10),
-              ),
-            ),
           ),
           const Spacer(),
           Text(

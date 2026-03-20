@@ -194,6 +194,28 @@ class _NullRenderer:
         raise structlog.DropEvent()
 
 
+class _StdlibBridge(logging.Handler):
+    """Bridge stdlib logging records into the Hiro structured logger.
+
+    Attached to third-party stdlib loggers (e.g. ``websockets``) so their
+    warnings/errors flow through the structlog pipeline with proper
+    timestamps, module tags, and file-sink routing.
+    """
+
+    def __init__(self, module: str, level: int = logging.WARNING):
+        super().__init__(level)
+        self._module = module
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            log = structlog.get_logger(self._module).bind(module=self._module)
+            level = record.levelname.lower()
+            log_method = getattr(log, level, log.warning)
+            log_method(record.getMessage(), stdlib_logger=record.name)
+        except Exception:
+            pass
+
+
 def _module_level_filter(logger, method_name, event_dict):
     """Drop events below configured per-module level overrides."""
     if not _LEVEL_OVERRIDES:
@@ -502,6 +524,31 @@ class Logger:
             use_csv=True,
             include_prefix="CLI.",
         )
+
+    @classmethod
+    def silence_stdlib(
+        cls,
+        logger_name: str,
+        *,
+        module: str,
+        level: str | int = "WARNING",
+    ) -> None:
+        """Redirect a stdlib logger into the Hiro structured logger.
+
+        Messages below *level* are suppressed.  Messages at or above
+        *level* are re-emitted through ``Logger.get(module)`` so they
+        appear in the console and file sinks with proper formatting.
+
+        Propagation is disabled to prevent bare-text duplicates on the
+        root logger.
+        """
+        if not cls._configured:
+            cls.configure()
+        numeric = cls._determine_level(level)
+        stdlib_logger = logging.getLogger(logger_name)
+        stdlib_logger.setLevel(numeric)
+        stdlib_logger.addHandler(_StdlibBridge(module, numeric))
+        stdlib_logger.propagate = False
 
     @classmethod
     def set_indent_unit(cls, unit: str):

@@ -1,13 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/services/audio_recording_service.dart';
 import '../../platform/media/audio_recorder_impl.dart';
 
 export '../../domain/services/audio_recording_service.dart'
-    show AudioRecordingResult;
+    show AudioRecordingResult, MicPermissionStatus;
 
 part 'recording_notifier.g.dart';
 
@@ -19,12 +18,23 @@ sealed class RecordingState {
   const RecordingState();
 }
 
-/// Mic is idle. [webPermissionGranted] reflects browser mic access on web;
-/// always true on mobile (the OS dialog fires during startRecording).
+/// Mic is idle. [micPermissionGranted] reflects whether mic access has been
+/// granted on the current platform (Android, iOS, or web).
 final class RecordingIdle extends RecordingState {
-  const RecordingIdle({this.webPermissionGranted = false});
+  const RecordingIdle({
+    this.micPermissionGranted = false,
+    this.previouslyDenied = false,
+    this.hasMicrophone = true,
+  });
 
-  final bool webPermissionGranted;
+  final bool micPermissionGranted;
+
+  /// True after the user has denied at least once. The UI uses this to offer
+  /// "Open Settings" alongside "Try Again" in the permission dialog.
+  final bool previouslyDenied;
+
+  /// False when no audio input hardware is detected (e.g. desktop with no mic).
+  final bool hasMicrophone;
 }
 
 /// Actively recording. [elapsedSeconds] drives the UI timer label.
@@ -38,13 +48,9 @@ final class RecordingActive extends RecordingState {
 /// [result] then call [RecordingNotifier.acknowledgeCompleted] to return
 /// to [RecordingIdle].
 final class RecordingCompleted extends RecordingState {
-  const RecordingCompleted({
-    this.result,
-    this.webPermissionGranted = false,
-  });
+  const RecordingCompleted({this.result});
 
   final AudioRecordingResult? result;
-  final bool webPermissionGranted;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +62,9 @@ final class RecordingCompleted extends RecordingState {
 class RecordingNotifier extends _$RecordingNotifier {
   late AudioRecorder _recorder;
   Timer? _timer;
-  bool _webPermissionGranted = !kIsWeb;
+  bool _micPermissionGranted = false;
+  bool _previouslyDenied = false;
+  bool _hasMicrophone = true;
 
   @override
   RecordingState build() {
@@ -71,41 +79,53 @@ class RecordingNotifier extends _$RecordingNotifier {
       // audioRecorderProvider owns _recorder and disposes it via its own
       // ref.onDispose — do not call _recorder.dispose() here (double-dispose).
     });
-    if (kIsWeb) unawaited(_checkPermissionSilently());
-    return RecordingIdle(webPermissionGranted: _webPermissionGranted);
+    unawaited(_probeHardwareAndPermission());
+    return _buildIdle();
   }
 
   // ---------------------------------------------------------------------------
-  // Permission (web only)
+  // Permission & hardware detection (all platforms)
   // ---------------------------------------------------------------------------
 
-  Future<void> _checkPermissionSilently() async {
+  RecordingIdle _buildIdle() => RecordingIdle(
+        micPermissionGranted: _micPermissionGranted,
+        previouslyDenied: _previouslyDenied,
+        hasMicrophone: _hasMicrophone,
+      );
+
+  Future<void> _probeHardwareAndPermission() async {
     try {
-      final granted = await _recorder.hasPermission();
-      _webPermissionGranted = granted;
-      if (granted && state is RecordingIdle) {
-        state = const RecordingIdle(webPermissionGranted: true);
+      _hasMicrophone = await _recorder.hasMicrophoneDevice();
+      if (!_hasMicrophone) {
+        if (state is RecordingIdle) state = _buildIdle();
+        return;
       }
+      final status = await _recorder.checkPermissionStatus();
+      _micPermissionGranted = status == MicPermissionStatus.granted;
+      if (state is RecordingIdle) state = _buildIdle();
     } catch (_) {
-      // Permission API unavailable — ignored, user will tap to grant.
+      // API unavailable — ignored, user will tap to grant.
     }
   }
 
-  /// Triggers the browser permission dialog on web. Returns true if granted.
-  /// No-op on mobile (permission is handled during [startRecording]).
-  Future<bool> ensureWebPermission() async {
-    if (!kIsWeb || _webPermissionGranted) return true;
+  /// Requests mic permission (triggers the OS/browser dialog on first ask).
+  /// Returns the resulting [MicPermissionStatus].
+  Future<MicPermissionStatus> ensurePermission() async {
+    if (_micPermissionGranted) return MicPermissionStatus.granted;
     try {
-      final granted = await _recorder.hasPermission();
-      _webPermissionGranted = granted;
-      if (state is RecordingIdle) {
-        state = RecordingIdle(webPermissionGranted: granted);
-      }
-      return granted;
+      final status = await _recorder.requestPermission();
+      _micPermissionGranted = status == MicPermissionStatus.granted;
+      if (!_micPermissionGranted) _previouslyDenied = true;
+      if (state is RecordingIdle) state = _buildIdle();
+      return status;
     } catch (_) {
-      return false;
+      _previouslyDenied = true;
+      return MicPermissionStatus.denied;
     }
   }
+
+  /// Opens device settings so the user can grant mic permission manually.
+  Future<void> openPermissionSettings() => _recorder.openPermissionSettings();
 
   // ---------------------------------------------------------------------------
   // Recording lifecycle
@@ -116,7 +136,6 @@ class RecordingNotifier extends _$RecordingNotifier {
   Future<void> startRecording() async {
     if (state is! RecordingIdle) return;
     await _recorder.startRecording();
-    _webPermissionGranted = true;
     state = const RecordingActive(elapsedSeconds: 0);
     _timer = Timer.periodic(const Duration(seconds: 1), _onTick);
     _recorder.isRecording.addListener(_onServiceStop);
@@ -142,10 +161,7 @@ class RecordingNotifier extends _$RecordingNotifier {
     if (state is! RecordingActive) return;
     _cleanupTimer();
     final result = await _recorder.stopRecording();
-    state = RecordingCompleted(
-      result: result,
-      webPermissionGranted: _webPermissionGranted,
-    );
+    state = RecordingCompleted(result: result);
   }
 
   /// Stops recording and returns the captured audio. Returns null if not
@@ -156,7 +172,7 @@ class RecordingNotifier extends _$RecordingNotifier {
     // Set state synchronously before the async gap so concurrent calls (e.g.
     // from _onLongPressMoveUpdate firing while the await is in progress) see
     // RecordingIdle immediately and return early — preventing re-entry.
-    state = RecordingIdle(webPermissionGranted: _webPermissionGranted);
+    state = _buildIdle();
     return await _recorder.stopRecording();
   }
 
@@ -167,16 +183,14 @@ class RecordingNotifier extends _$RecordingNotifier {
     // Set state synchronously before the async gap — same re-entry guard as
     // stopRecording(); _onLongPressMoveUpdate fires on every pointer event
     // while sliding, so multiple concurrent cancelRecording() calls are common.
-    state = RecordingIdle(webPermissionGranted: _webPermissionGranted);
+    state = _buildIdle();
     await _recorder.cancelRecording();
   }
 
   /// Called by the widget after it has handled a [RecordingCompleted] state,
   /// returning the notifier to [RecordingIdle].
   void acknowledgeCompleted() {
-    if (state is RecordingCompleted) {
-      state = RecordingIdle(webPermissionGranted: _webPermissionGranted);
-    }
+    if (state is RecordingCompleted) state = _buildIdle();
   }
 
   void _cleanupTimer() {

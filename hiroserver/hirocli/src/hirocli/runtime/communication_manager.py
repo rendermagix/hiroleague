@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .message_adapter import MessageAdapterPipeline
     from .request_handler import RequestHandler
 
-log = Logger.get("COMM")
+log = Logger.get("COMM_MAN")
 
 
 def _check_permissions(msg: UnifiedMessage) -> None:

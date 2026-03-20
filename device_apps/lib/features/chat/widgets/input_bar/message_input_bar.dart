@@ -1,12 +1,13 @@
 import 'dart:async' show unawaited;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../application/providers.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/errors/app_exception.dart';
+import 'mic_permission_dialog.dart';
 
 class MessageInputBar extends ConsumerStatefulWidget {
   const MessageInputBar({super.key, required this.channelId});
@@ -74,23 +75,40 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar>
   // Recording gestures — delegate logic to RecordingNotifier
   // ---------------------------------------------------------------------------
 
-  void _onMicTap() => unawaited(_requestWebPermission());
-
-  Future<void> _requestWebPermission() async {
-    final granted =
-        await ref.read(recordingProvider.notifier).ensureWebPermission();
-    if (!granted && mounted) _showError(AppStrings.micPermissionRequired);
-  }
-
   void _onLongPressStart(LongPressStartDetails details) {
     final recording = ref.read(recordingProvider);
     if (recording is! RecordingIdle) return;
-    if (kIsWeb && !recording.webPermissionGranted) {
-      unawaited(_requestWebPermission());
+    if (!recording.hasMicrophone) {
+      _showError(AppStrings.noMicrophoneDetected);
+      return;
+    }
+    if (!recording.micPermissionGranted) {
+      unawaited(_showPermissionFlow(recording.previouslyDenied));
       return;
     }
     setState(() => _dragOffset = 0.0);
     unawaited(_startRecording());
+  }
+
+  Future<void> _showPermissionFlow(bool previouslyDenied) async {
+    if (!mounted) return;
+    final action = await showMicPermissionDialog(
+      context,
+      previouslyDenied: previouslyDenied,
+    );
+    if (!mounted) return;
+    final notifier = ref.read(recordingProvider.notifier);
+    switch (action) {
+      case MicPermissionDialogResult.requestPermission:
+        final status = await notifier.ensurePermission();
+        if (status == MicPermissionStatus.denied && mounted) {
+          _showError(AppStrings.micPermissionDenied);
+        }
+      case MicPermissionDialogResult.openSettings:
+        await notifier.openPermissionSettings();
+      case MicPermissionDialogResult.dismissed:
+        break;
+    }
   }
 
   Future<void> _startRecording() async {
@@ -199,9 +217,6 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar>
     final RecordingActive? activeState =
         recordingState is RecordingActive ? recordingState : null;
     final isRecording = activeState != null;
-    final idleState = recordingState is RecordingIdle ? recordingState : null;
-    final showPermissionBadge =
-        kIsWeb && idleState != null && !idleState.webPermissionGranted;
 
     final threshold = _cancelThreshold(context);
     // progress ∈ [0, 1]: 0 = no drag, 1 = at cancel threshold.
@@ -270,14 +285,27 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar>
                 ),
               )
             else
-              GestureDetector(
-                onTap: (showPermissionBadge && isConnected) ? _onMicTap : null,
-                onLongPressStart: isConnected ? _onLongPressStart : null,
-                onLongPressMoveUpdate:
-                    isConnected ? _onLongPressMoveUpdate : null,
-                onLongPressEnd: isConnected ? _onLongPressEnd : null,
-                // Transform.translate moves the visual group (slide hint + mic)
-                // left with the drag without affecting layout or hit-testing.
+              // RawGestureDetector with a short 150ms hold duration instead of
+              // Flutter's default ~500ms — makes recording feel instant.
+              RawGestureDetector(
+                gestures: {
+                  LongPressGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                          LongPressGestureRecognizer>(
+                    () => LongPressGestureRecognizer(
+                      duration: const Duration(milliseconds: 150),
+                    ),
+                    (instance) {
+                      instance
+                        ..onLongPressStart =
+                            isConnected ? _onLongPressStart : null
+                        ..onLongPressMoveUpdate =
+                            isConnected ? _onLongPressMoveUpdate : null
+                        ..onLongPressEnd =
+                            isConnected ? _onLongPressEnd : null;
+                    },
+                  ),
+                },
                 child: Transform.translate(
                   offset: Offset(_dragOffset, 0),
                   child: Row(
@@ -289,7 +317,6 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar>
                       _MicButton(
                         isRecording: isRecording,
                         isConnected: isConnected,
-                        showPermissionBadge: showPermissionBadge,
                         pulseAnimation: _pulseAnim,
                       ),
                     ],
@@ -401,13 +428,11 @@ class _MicButton extends StatelessWidget {
   const _MicButton({
     required this.isRecording,
     required this.isConnected,
-    required this.showPermissionBadge,
     required this.pulseAnimation,
   });
 
   final bool isRecording;
   final bool isConnected;
-  final bool showPermissionBadge;
   final Animation<double> pulseAnimation;
 
   // Idle size and 1.5× recording size.
@@ -430,23 +455,7 @@ class _MicButton extends StatelessWidget {
       width: _idleSize,
       height: _idleSize,
       decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.mic_rounded, color: cs.onPrimary),
-          if (showPermissionBadge)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration:
-                    BoxDecoration(color: cs.error, shape: BoxShape.circle),
-              ),
-            ),
-        ],
-      ),
+      child: Icon(Icons.mic_rounded, color: cs.onPrimary),
     );
   }
 

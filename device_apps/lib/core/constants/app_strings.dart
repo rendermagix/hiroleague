@@ -40,11 +40,19 @@ abstract final class AppStrings {
   static const String chatConnecting = 'Connecting to gateway\u2026';
   static const String slideToCancelRecording = 'Slide to cancel';
 
-  // Chat — mic permission (web)
-  static const String micPermissionRequired =
-      'Microphone access is required. Please allow it in your browser and try again.';
-  static const String micPermissionError =
-      'Could not request microphone permission.';
+  // Chat — mic permission
+  static const String micPermissionDialogTitle = 'Microphone Access';
+  static const String micPermissionDialogBody =
+      'Voice messages require microphone access. Tap Continue to allow.';
+  static const String micPermissionDialogContinue = 'Continue';
+  static const String micPermissionDialogNotNow = 'Not Now';
+  static const String micPermissionDialogOpenSettings = 'Open Settings';
+  static const String micPermissionDenied =
+      'Microphone access was denied. You can grant it in Settings.';
+  static const String micPermissionDeniedWeb =
+      'Microphone access was blocked. Click the lock icon in your browser\u2019s address bar to allow it.';
+  static const String noMicrophoneDetected =
+      'No microphone was detected on this device.';
 
   // Chat — recording errors
   static const String recordingStartError = 'Could not start recording';

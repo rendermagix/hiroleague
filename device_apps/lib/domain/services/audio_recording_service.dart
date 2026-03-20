@@ -2,6 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 
+/// Mic permission status returned by [AudioRecorder.checkPermissionStatus]
+/// and [AudioRecorder.requestPermission].
+enum MicPermissionStatus { granted, denied }
+
 /// Result returned from [AudioRecorder.stopRecording].
 class AudioRecordingResult {
   const AudioRecordingResult({
@@ -27,7 +31,20 @@ abstract class AudioRecorder {
 
   int get elapsedMs;
 
-  Future<bool> hasPermission();
+  /// Checks mic permission without triggering the OS/browser dialog.
+  Future<MicPermissionStatus> checkPermissionStatus();
+
+  /// Requests mic permission, showing the OS/browser dialog if applicable.
+  Future<MicPermissionStatus> requestPermission();
+
+  /// Opens device settings so the user can grant mic permission manually.
+  /// No-op on web (browser permissions can't be opened programmatically).
+  Future<void> openPermissionSettings();
+
+  /// Returns true if the device has at least one audio input (microphone).
+  /// On mobile this always returns true; on web it probes via the browser
+  /// MediaDevices API.
+  Future<bool> hasMicrophoneDevice();
 
   Future<void> startRecording();
 
